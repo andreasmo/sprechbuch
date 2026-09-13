@@ -20,8 +20,8 @@ Stand: 13.09.2026
 | Phase | Inhalt | Stand |
 |---|---|---|
 | **1 – Kern** | TypeScript-Port der Analyse mit Paritätstests; EPUB- und PDF-Import; `.hbook`-Format mit Schema, Querverweisprüfung und Migrationen; CLI; App-Gerüst (Tauri + Svelte) mit Import im Web Worker, Übersicht und Kapitelvorschau | **erledigt** |
-| **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus aus dem früheren Studio-Reader (Prompter, Satzvorschau, Fortschritt); Autosave (IndexedDB-Journal); JSON-Import/-Export in der App | offen |
-| **3 – Desktop** | atomares Speichern neben der Quelle, Erkennung fremder Änderungen (Cloud-Sync), `.hbook`-Dateiverknüpfung, zuletzt geöffnete Bücher, Installer (NSIS/DMG/AppImage), Auto-Update über GitHub Releases | offen |
+| **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus aus dem früheren Studio-Reader (Prompter, Satzvorschau, Fortschritt); Autosave (IndexedDB); JSON-Import/-Export in der App | **erledigt** |
+| **3 – Desktop** | atomares Speichern neben der Quelle, Erkennung fremder Änderungen (Cloud-Sync), `.hbook`-Dateiverknüpfung, Installer (NSIS/DMG/AppImage), Auto-Update über GitHub Releases | offen |
 | **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | offen |
 | **5 – Verteilung** | Release-Seite, Web-Version hosten, Tablet-Nutzung in der Kabine (Web-App/PWA mit `.hbook`) | offen |
 
@@ -37,12 +37,36 @@ Stand: 13.09.2026
 - **Sicherheit:** Die App darf nur Dateien lesen und schreiben, die im Dateidialog gewählt
   wurden; alles andere scheitert am Scope.
 
+## Ergebnis Phase 2
+
+- **Bearbeitungsbefehle im Kern** (`packages/core/src/edit`): 14 serialisierbare Befehle
+  (Sprecher setzen/bestätigen, Rede setzen/teilen/entfernen, sechs Markierungsarten, Satzgrenzen,
+  Figuren anlegen/ändern/färben/zusammenführen, Aussprache). Rückgängig/Wiederholen über
+  Immer-Patches; jede Änderung ist mit Gültigkeitsprüfung und exaktem Rückweg getestet.
+  Kapitelfarben werden nach jeder Änderung kollisionsfrei nachgeführt.
+- **App**: vier Ansichten – Übersicht (mit Figuren- und Ausspracheverwaltung), Bearbeiten,
+  Prüfen, Aufnehmen. Automatische Sicherung jeder Änderung in IndexedDB, Liste „Zuletzt
+  bearbeitet“, Schutz vor dem Überschreiben ungespeicherter Änderungen beim erneuten Öffnen
+  einer Datei. Lese-Einstellungen (Thema, Schrift, Tempo) pro Gerät.
+- **Geprüft** im Browser und in der echten Desktop-App (WebView2, echte Tastatureingaben über
+  das DevTools-Protokoll): Prüfen per Tastatur, Rückgängig, Aufnahmemodus, Speichern und
+  Wiederöffnen mit allen Markierungen, Wiederherstellung nach Beenden der App.
+
+### Aus dem früheren Studio-Reader noch nicht übernommen
+
+Seitenmodus (Blättern), Volltextsuche, Figur isolieren, Satznummern, Atemzeichen an Kommata,
+Sitzungs-Timer mit gemessenem Sprechtempo.
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
   oben auf einer Seite ist nur am Einzug erkennbar.
 - Sprecherzuordnung: rund ein Drittel der Redeteile ist geraten (Nähe, Wechselrede) – dafür
   kommen Prüf-Warteschlange (Phase 2) und KI (Phase 4).
-- Speichern auf dem Desktop ist noch nicht atomar (Phase 3).
-- Der Claude-Skill aus dem Prototyp wird auf die neue CLI umgestellt, sobald die App den
-  Aufnahmemodus hat (Phase 2).
+- Speichern auf dem Desktop ist noch nicht atomar (Phase 3). In der Web-Version heißt Speichern
+  Herunterladen – eine vorhandene Datei kann dort nicht überschrieben werden.
+- Eine erneute automatische Analyse eines bereits bearbeiteten Buches (unter Beibehaltung der
+  eigenen Entscheidungen) gibt es noch nicht.
+- Die nativen Datei-Dialoge der Desktop-App sind nur über die Rechteprüfung, nicht per Klick
+  automatisiert getestet.
+- Der Claude-Skill aus dem Prototyp ist noch nicht auf die neue CLI umgestellt.

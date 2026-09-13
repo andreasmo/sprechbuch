@@ -10,20 +10,24 @@ export interface PickedFile {
   path?: string;
 }
 
-export type FileKind = "source" | "hbook";
+export type FileKind = "source" | "hbook" | "json" | "any";
 
 export interface Platform {
   readonly kind: "tauri" | "web";
+  /** Kann an einen bekannten Pfad zurückschreiben (Desktop) – im Web wird jedes Mal heruntergeladen. */
+  readonly canOverwrite: boolean;
   /** Datei auswählen und lesen; null bei Abbruch. */
   pickFile(kind: FileKind): Promise<PickedFile | null>;
   /**
-   * .hbook speichern. Ohne `path` wird nach dem Ziel gefragt.
+   * Datei speichern. Mit `path` ohne Rückfrage dorthin, sonst Dialog bzw. Download.
    * Liefert den Pfad (Desktop) bzw. Dateinamen (Web) oder null bei Abbruch.
    */
-  saveHbook(bytes: Uint8Array, suggestedName: string, path?: string): Promise<string | null>;
+  saveFile(bytes: Uint8Array, suggestedName: string, kind: Exclude<FileKind, "any" | "source">, path?: string): Promise<string | null>;
 }
 
-export const ACCEPT: Record<FileKind, { label: string; extensions: string[]; mime: string[] }> = {
-  source: { label: "Bücher (EPUB, PDF)", extensions: ["epub", "pdf"], mime: ["application/epub+zip", "application/pdf"] },
-  hbook: { label: "Sprechbuch", extensions: ["hbook"], mime: ["application/vnd.sprechbuch.book+zip"] },
+export const ACCEPT: Record<FileKind, { label: string; extensions: string[]; mime: string }> = {
+  source: { label: "Bücher (EPUB, PDF)", extensions: ["epub", "pdf"], mime: "application/octet-stream" },
+  hbook: { label: "Sprechbuch", extensions: ["hbook"], mime: "application/vnd.sprechbuch.book+zip" },
+  json: { label: "Sprechbuch als JSON", extensions: ["json"], mime: "application/json" },
+  any: { label: "Bücher und Sprechbuch-Dateien", extensions: ["epub", "pdf", "hbook", "json"], mime: "application/octet-stream" },
 };

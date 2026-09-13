@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { analyze, type Doc } from "../src/index.js";
+import { analyze, importBook, type Doc } from "../src/index.js";
 
 /** Minimales, gültiges EPUB 3 aus Kapitel-HTML. */
 export async function makeEpub(
@@ -117,3 +117,23 @@ export const PDF_PAGES: PdfLine[][] = [
   // Neue Seite: Absatzbeginn nur am Einzug erkennbar – ohne Einzug wäre es eine Fortsetzung
   [{ text: "Ende der Probe.", x: indent }],
 ];
+
+/** Kleines Buch mit zwei Kapiteln, drei Figuren, sicheren und unsicheren Zuordnungen. */
+export async function sampleBook() {
+  const bytes = await makeEpub([
+    { file: "k1.xhtml", body: [
+      "<h1>Kapitel 1</h1>",
+      "<p>Anna stand am Ufer und sah dem Boot nach.</p>",
+      "<p>»Kommst du mit?«, fragte Anna. »Es wird bald <em>dunkel</em>.«</p>",
+      "<p>»Gleich«, antwortete Jonas.</p>",
+      "<p>»Du trödelst immer.«</p>",
+      "<p>»Und du bist ungeduldig.«</p>",
+    ].join("") },
+    { file: "k2.xhtml", body: [
+      "<h1>Kapitel 2</h1>",
+      "<p>»Guten Morgen«, sagte Paul. Er setzte sich zu ihnen.</p>",
+      "<p>»Morgen«, sagte Anna.</p>",
+    ].join("") },
+  ], { title: "Am Ufer", author: "Test" });
+  return { bytes, ...(await importBook(bytes, "am-ufer.epub")) };
+}

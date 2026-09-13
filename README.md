@@ -7,31 +7,45 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 1 (Kern).** Import, Analyse und Buchformat sind fertig und getestet; die App
-> zeigt Übersicht und Vorschau. Editor, Aufnahmemodus und KI-Unterstützung folgen – siehe
-> [docs/PLAN.md](docs/PLAN.md).
+> **Status: Phase 2 (Editor & Aufnahme).** Import, Analyse, Buchformat, Bearbeiten, Prüfen und
+> Aufnahmemodus sind fertig und getestet. Als Nächstes: Desktop-Komfort (atomares Speichern,
+> Dateiverknüpfung, Installer) und KI-Unterstützung – siehe [docs/PLAN.md](docs/PLAN.md).
 
-## Was es schon kann
+## Was es kann
 
-- **EPUB und PDF importieren** (Word folgt). PDF-Absätze werden aus Koordinaten rekonstruiert:
+**Import und Analyse**
+
+- **EPUB und PDF** (Word folgt). PDF-Absätze werden aus Koordinaten rekonstruiert:
   Kopf-/Fußzeilen und Seitenzahlen fallen weg, Silbentrennungen werden aufgelöst.
 - **Sätze** mit deutschen Besonderheiten (»…«, sagte er. ist *ein* Satz; *z. B.*, *am 3. Oktober*).
 - **Direkte Rede** in allen gängigen Anführungsstilen, inklusive Zitat in der Rede und
   Rede über mehrere Absätze.
 - **Sprecherzuordnung** mit Verlässlichkeit je Redeteil: Inquit, Absatzbindung, Pronomen,
-  Anrede-Ausschluss, Nähe, Wechselrede. Unsichere Stellen sind als solche markiert.
+  Anrede-Ausschluss, Nähe, Wechselrede.
 - **Textmarker-Farben**: Hauptfiguren buchweit fest, Nebenfiguren kapitelweise – innerhalb
   eines Kapitels nie doppelt. Dazu Initialen-Kürzel, damit es nicht allein an der Farbe hängt.
 - **Aussprache-Kandidaten**: Eigennamen und fremde Wörter, die vor der Aufnahme geklärt werden sollten.
-- **`.hbook`-Format** mit Schema, Querverweisprüfung und Migrationen – siehe
-  [docs/bookfile-format.md](docs/bookfile-format.md).
+
+**In der App**
+
+| Ansicht | Was man dort tut |
+|---|---|
+| **Übersicht** | Umfang, Sprechdauer, Qualität der Zuordnung; Figuren umbenennen, zusammenführen, Farbe und Kürzel festlegen, Stimmnotiz; Aussprache klären |
+| **Bearbeiten** | Rede anklicken → Sprecher ändern, bestätigen, teilen, entfernen · Text markieren → als Rede setzen, Betonung, Retake, Lesezeichen, Notiz · <kbd>Alt</kbd>+Klick → Satz teilen, Pause, Atemzeichen · Pipe `\|` anklicken → Sätze verbinden |
+| **Prüfen** | Alle unsicheren Zuordnungen nacheinander mit Kontext: <kbd>Enter</kbd> stimmt, <kbd>1</kbd>–<kbd>9</kbd> andere Figur, <kbd>N</kbd> keine Rede, <kbd>→</kbd> überspringen |
+| **Aufnehmen** | Satz für Satz lesen (<kbd>Leertaste</kbd>/<kbd>←</kbd>), Prompter mit Tempo, Vorschau auf den nächsten Satz, Fortschritt und Restzeit, Retake <kbd>r</kbd>, Lesezeichen <kbd>b</kbd>, Notiz <kbd>n</kbd>, Fokus <kbd>f</kbd>, Themen inklusive blendarmem Studio-Modus <kbd>t</kbd> |
+
+Überall: <kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Y</kbd> Rückgängig/Wiederholen,
+<kbd>Strg</kbd>+<kbd>S</kbd> Speichern. Jede Änderung wird sofort im App-Speicher gesichert – nach
+einem Absturz oder Neustart steht das Buch unter „Zuletzt bearbeitet“ bereit. Von Hand
+getroffene Entscheidungen überschreibt keine automatische Analyse.
 
 Alles läuft lokal. Es wird nichts hochgeladen.
 
 ## Aufbau
 
 ```
-packages/core     Import, Analyse, Buchformat – TypeScript, läuft in Browser, Web Worker und Node
+packages/core     Import, Analyse, Buchformat, Bearbeitungsbefehle – läuft in Browser, Worker und Node
 packages/cli      Kommandozeile: sprechbuch import | info | validate | export-json | import-json
 apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Tauri als Web-App
 reference/python  Python-Prototyp als Referenz für Paritätstests

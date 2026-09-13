@@ -1,3 +1,4 @@
+/* ---------- Themen ---------- */
 :root {
   --bg: #f7f5f0;
   --panel: #fffdf9;
@@ -9,38 +10,51 @@
   --danger: #b3261e;
   --ok: #2e7d32;
   --warn: #b35900;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 24px rgb(0 0 0 / 0.06);
+  --cur: #ece9e2;
+  --curline: #3b6fd8;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 24px rgb(0 0 0 / 0.08);
   --radius: 12px;
   --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --read: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+:root[data-theme="sepia"] {
+  --bg: #f3ead6; --panel: #faf4e6; --fg: #33291b; --muted: #7a6c53; --line: #e0d3b6;
+  --cur: #e8dcc0; --curline: #8a5a12; --accent: #8a5a12;
+}
+
+:root[data-theme="dark"] {
+  --bg: #141517; --panel: #1c1e21; --fg: #e8e6e1; --muted: #9ba0a6; --line: #2c3035;
+  --accent: #8cb0ff; --accent-fg: #0f1115; --danger: #ff8a80; --ok: #86d98a; --warn: #ffb066;
+  --cur: #252a31; --curline: #8cb0ff; --shadow: none; color-scheme: dark;
+}
+
+/* Studio: sehr dunkel, warm, blendarm – für die Sprecherkabine */
+:root[data-theme="studio"] {
+  --bg: #0b0908; --panel: #14100d; --fg: #ddd2c4; --muted: #8d8175; --line: #2a231d;
+  --accent: #e0a85c; --accent-fg: #0b0908; --danger: #ff8a80; --ok: #9bd08c; --warn: #e0a85c;
+  --cur: #1e1914; --curline: #e0a85c; --shadow: none; color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141517;
-    --panel: #1c1e21;
-    --fg: #e8e6e1;
-    --muted: #9ba0a6;
-    --line: #2c3035;
-    --accent: #8cb0ff;
-    --accent-fg: #0f1115;
-    --danger: #ff8a80;
-    --ok: #86d98a;
-    --warn: #ffb066;
-    --shadow: none;
+  :root[data-theme="auto"] {
+    --bg: #141517; --panel: #1c1e21; --fg: #e8e6e1; --muted: #9ba0a6; --line: #2c3035;
+    --accent: #8cb0ff; --accent-fg: #0f1115; --danger: #ff8a80; --ok: #86d98a; --warn: #ffb066;
+    --cur: #252a31; --curline: #8cb0ff; --shadow: none; color-scheme: dark;
   }
 }
 
+/* ---------- Grundlagen ---------- */
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; min-height: 100%; }
 body {
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.5 var(--ui);
   -webkit-font-smoothing: antialiased;
 }
-#app { min-height: 100%; }
+#app { min-height: 100vh; }
 
 button {
   font: inherit;
@@ -49,34 +63,43 @@ button {
   border: 1px solid var(--line);
   background: var(--panel);
   border-radius: 8px;
-  padding: 0.45rem 0.9rem;
+  padding: 0.4rem 0.85rem;
+  white-space: nowrap;
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.55; cursor: default; }
+button:disabled { opacity: 0.5; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
-button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.ghost { border-color: transparent; background: transparent; }
+button.ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 7%, transparent); border-color: transparent; }
+button.danger { color: var(--danger); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-select {
+input, select, textarea {
   font: inherit;
   color: inherit;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0.35rem 0.6rem;
-  max-width: 100%;
+  padding: 0.35rem 0.55rem;
 }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; }
+input[type="range"] { padding: 0; }
 
 h1, h2, h3 { line-height: 1.2; margin: 0; }
 .muted { color: var(--muted); }
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
+.small { font-size: 0.85rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .tabular { font-variant-numeric: tabular-nums; }
+kbd {
+  font: 600 0.75em/1 ui-monospace, Consolas, monospace;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 0.3rem;
+  padding: 0.15em 0.35em;
+  background: var(--panel);
+}
 
-/* Textmarker – Band statt Fläche, pro Zeile neu angesetzt */
+/* ---------- Textmarker ---------- */
 mark.sp {
   color: inherit;
   background-color: transparent;
@@ -106,6 +129,17 @@ mark.sp .badge {
   padding: 0.16em 0.3em;
   margin-right: 0.18em;
 }
+.swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.3rem 0.5rem;
+  background: var(--mark);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--strong) 40%, transparent);
+  flex: none;
+}
 .q2 { font-style: italic; }
-.pipe { color: var(--muted); font-weight: 300; opacity: 0.8; }
-.ppipe { color: var(--muted); opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

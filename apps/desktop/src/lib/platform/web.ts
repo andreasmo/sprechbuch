@@ -3,6 +3,7 @@ import { ACCEPT, type FileKind, type Platform } from "./types";
 
 export const webPlatform: Platform = {
   kind: "web",
+  canOverwrite: false,
 
   pickFile(kind: FileKind) {
     return new Promise((resolve) => {
@@ -18,8 +19,8 @@ export const webPlatform: Platform = {
     });
   },
 
-  async saveHbook(bytes, suggestedName) {
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: ACCEPT.hbook.mime[0] }));
+  async saveFile(bytes, suggestedName, kind) {
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: ACCEPT[kind].mime }));
     const a = document.createElement("a");
     a.href = url;
     a.download = suggestedName;

@@ -26,3 +26,12 @@ export { createBook, sha256Hex, type SourceInfo } from "./book/create.js";
 export { BookFormatError, migrateBook, validateBook } from "./book/migrate.js";
 export { bookFromJson, bookToJson, readHbook, writeHbook, type HbookContents } from "./book/hbook.js";
 export { bookStats, REVIEW_THRESHOLD, type BookStats } from "./book/stats.js";
+
+// Bearbeiten
+export {
+  applyBookPatches, applyEdit, describeEdit, EditError, setProgress,
+  type Edit, type EditResult, type MarkInput, type Patch,
+} from "./edit/edits.js";
+export {
+  buildLookup, endOf, needsReview, reviewQueue, slotOf, startOf, type BlockRef, type BookLookup,
+} from "./edit/lookup.js";

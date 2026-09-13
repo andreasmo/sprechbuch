@@ -1,20 +1,24 @@
-import type { Book, BookStats, ImportStage } from "@sprechbuch/core";
+import type { Book, ImportStage } from "@sprechbuch/core";
 
 export type WorkerRequest =
   | { id: number; type: "import"; name: string; bytes: Uint8Array }
-  | { id: number; type: "open"; name: string; bytes: Uint8Array };
+  | { id: number; type: "open"; bytes: Uint8Array }
+  | { id: number; type: "json"; text: string }
+  | { id: number; type: "pack"; book: Book; source: Uint8Array | null };
 
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: ImportStage }
-  | { id: number; type: "book"; book: Book; stats: BookStats; hbook: Uint8Array; ms: number }
-  | { id: number; type: "error"; message: string; known: boolean };
+  | { id: number; type: "book"; book: Book; source: Uint8Array | null; ms: number }
+  | { id: number; type: "bytes"; bytes: Uint8Array }
+  | { id: number; type: "error"; message: string };
 
 export interface LoadedBook {
   book: Book;
-  stats: BookStats;
-  hbook: Uint8Array;
+  source: Uint8Array | null;
   ms: number;
 }
+
+type Payload = WorkerRequest extends infer R ? (R extends WorkerRequest ? Omit<R, "id"> : never) : never;
 
 let worker: Worker | null = null;
 let nextId = 1;
@@ -24,7 +28,7 @@ function getWorker(): Worker {
   return worker;
 }
 
-function run(req: Omit<WorkerRequest, "id">, onProgress?: (s: ImportStage) => void): Promise<LoadedBook> {
+function run<R>(req: Payload, pick: (msg: WorkerResponse) => R | undefined, onProgress?: (s: ImportStage) => void): Promise<R> {
   const id = nextId++;
   const w = getWorker();
   return new Promise((resolve, reject) => {
@@ -37,14 +41,26 @@ function run(req: Omit<WorkerRequest, "id">, onProgress?: (s: ImportStage) => vo
       }
       w.removeEventListener("message", onMessage);
       if (msg.type === "error") reject(new Error(msg.message));
-      else resolve({ book: msg.book, stats: msg.stats, hbook: msg.hbook, ms: msg.ms });
+      else {
+        const r = pick(msg);
+        if (r === undefined) reject(new Error(`Unerwartete Antwort: ${msg.type}`));
+        else resolve(r);
+      }
     };
     w.addEventListener("message", onMessage);
     w.postMessage({ ...req, id });
   });
 }
 
-export const importSource = (name: string, bytes: Uint8Array, onProgress?: (s: ImportStage) => void) =>
-  run({ type: "import", name, bytes }, onProgress);
+const asBook = (m: WorkerResponse) => (m.type === "book" ? { book: m.book, source: m.source, ms: m.ms } : undefined);
 
-export const openHbook = (name: string, bytes: Uint8Array) => run({ type: "open", name, bytes });
+export const importSource = (name: string, bytes: Uint8Array, onProgress?: (s: ImportStage) => void) =>
+  run<LoadedBook>({ type: "import", name, bytes }, asBook, onProgress);
+
+export const openHbook = (bytes: Uint8Array) => run<LoadedBook>({ type: "open", bytes }, asBook);
+
+export const openJson = (text: string) => run<LoadedBook>({ type: "json", text }, asBook);
+
+/** Buch (+ Quelle) zu .hbook-Bytes packen – im Worker, weil ZIP-Kompression Zeit kostet. */
+export const packHbook = (book: Book, source: Uint8Array | null) =>
+  run<Uint8Array>({ type: "pack", book, source }, (m) => (m.type === "bytes" ? m.bytes : undefined));

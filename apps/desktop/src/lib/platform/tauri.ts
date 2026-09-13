@@ -6,6 +6,7 @@ const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
 export const tauriPlatform: Platform = {
   kind: "tauri",
+  canOverwrite: true,
 
   async pickFile(kind: FileKind) {
     const path = await open({
@@ -17,10 +18,10 @@ export const tauriPlatform: Platform = {
     return { name: baseName(path), path, bytes: await readFile(path) };
   },
 
-  async saveHbook(bytes, suggestedName, path) {
+  async saveFile(bytes, suggestedName, kind, path) {
     const target = path ?? (await save({
       defaultPath: suggestedName,
-      filters: [{ name: ACCEPT.hbook.label, extensions: ACCEPT.hbook.extensions }],
+      filters: [{ name: ACCEPT[kind].label, extensions: ACCEPT[kind].extensions }],
     }));
     if (!target) return null;
     // TODO(Phase 3): atomar schreiben (temporäre Datei + Umbenennen) und Fremdänderungen erkennen

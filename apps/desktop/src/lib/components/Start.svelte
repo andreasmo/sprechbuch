@@ -1,0 +1,110 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { readBrowserFile, type PickedFile } from "../platform";
+  import { deleteBook, listRecent, type RecentEntry } from "../store/persist";
+
+  let { onPick, onDrop, onOpenRecent, ready }: {
+    onPick: () => void;
+    onDrop: (file: PickedFile) => void;
+    onOpenRecent: (id: string) => void;
+    ready: boolean;
+  } = $props();
+
+  let over = $state(false);
+  let recent = $state<RecentEntry[]>([]);
+
+  onMount(async () => {
+    try {
+      recent = await listRecent();
+    } catch {
+      recent = [];
+    }
+  });
+
+  async function drop(ev: DragEvent) {
+    ev.preventDefault();
+    over = false;
+    const file = ev.dataTransfer?.files?.[0];
+    if (file) onDrop(await readBrowserFile(file));
+  }
+
+  async function forget(id: string) {
+    await deleteBook(id);
+    recent = recent.filter((r) => r.id !== id);
+  }
+
+  const when = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+</script>
+
+<section class="start">
+  <div class="intro">
+    <h1>Bücher so aufbereiten, dass man sie laut lesen kann.</h1>
+    <p class="muted">
+      Sprechbuch erkennt Sätze und direkte Rede, ordnet jede Rede einer Figur zu und markiert sie mit einer eigenen
+      Textmarker-Farbe. Du prüfst, korrigierst und liest direkt daraus ein. Gespeichert wird alles in einer
+      <strong>.hbook</strong>-Datei.
+    </p>
+  </div>
+
+  <div
+    class="drop panel"
+    class:over
+    role="region"
+    aria-label="Datei hier ablegen"
+    ondragover={(e) => { e.preventDefault(); over = true; }}
+    ondragleave={() => (over = false)}
+    ondrop={drop}
+  >
+    <div class="big" aria-hidden="true">📖</div>
+    <p><strong>EPUB, PDF oder .hbook hierher ziehen</strong></p>
+    <div class="actions">
+      <button class="primary" disabled={!ready} onclick={onPick}>Datei öffnen …</button>
+    </div>
+    <p class="muted small">Word-Dateien folgen. Alles bleibt auf deinem Rechner – es wird nichts hochgeladen.</p>
+  </div>
+
+  {#if recent.length}
+    <section class="recent">
+      <h2>Zuletzt bearbeitet</h2>
+      <ul>
+        {#each recent as r (r.id)}
+          <li class="panel">
+            <button class="open ghost" onclick={() => onOpenRecent(r.id)}>
+              <span class="title">{r.title}</span>
+              <span class="muted small">
+                {r.author ? `${r.author} · ` : ""}{when(r.updatedAt)}{r.progress ? ` · gelesen bis ${r.progress} %` : ""}
+              </span>
+              <span class="small file">
+                {#if r.dirty}<span class="unsaved">● nicht als .hbook gespeichert</span>{:else if r.savedPath}<span class="muted">{r.savedPath}</span>{/if}
+              </span>
+            </button>
+            <button class="ghost forget" title="Aus der Liste entfernen (die .hbook-Datei bleibt erhalten)" aria-label="Aus der Liste entfernen" onclick={() => forget(r.id)}>✕</button>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+</section>
+
+<style>
+  .start { display: grid; gap: 1.8rem; max-width: 46rem; margin: 1.5rem auto 0; }
+  h1 { font-family: var(--read); font-size: clamp(1.7rem, 3.2vw, 2.4rem); font-weight: 600; letter-spacing: -0.01em; }
+  .intro p { font-size: 1.02rem; }
+  .drop {
+    text-align: center; padding: 2rem 1.5rem;
+    border: 2px dashed var(--line); box-shadow: none;
+    transition: border-color 0.15s, background-color 0.15s;
+  }
+  .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+  .drop p { margin: 0.3rem 0; }
+  .big { font-size: 2.2rem; }
+  .actions { margin: 0.8rem 0; }
+  .recent h2 { font-size: 1rem; margin-bottom: 0.6rem; }
+  .recent ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+  .recent li { display: flex; align-items: stretch; box-shadow: none; }
+  .open { flex: 1; display: grid; gap: 0.1rem; text-align: left; padding: 0.7rem 0.9rem; white-space: normal; border-radius: var(--radius) 0 0 var(--radius); }
+  .title { font-weight: 650; font-size: 1.02rem; }
+  .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unsaved { color: var(--warn); }
+  .forget { padding: 0 0.9rem; color: var(--muted); border-radius: 0 var(--radius) var(--radius) 0; }
+</style>
