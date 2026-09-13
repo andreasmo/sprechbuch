@@ -1,0 +1,27 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+.svelte-kit/
+
+# Tauri / Rust
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+
+# Lokale Testbücher und daraus erzeugte Referenzdaten.
+# Enthalten vollständige Buchtexte – Urheberrecht ungeklärt, daher nie committen.
+fixtures/local/*
+!fixtures/local/.gitkeep
+
+# Python-Referenz
+__pycache__/
+*.pyc
+
+# Editor / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.hbook

@@ -1,0 +1,22 @@
+{
+  "name": "sprechbuch-monorepo",
+  "private": true,
+  "description": "Sprechbuch – Bücher als Leseskript für die Hörbuch-Aufnahme aufbereiten",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:cli": "npm run build -w @sprechbuch/cli",
+    "cli": "npm run dev -w @sprechbuch/cli --",
+    "golden": "python reference/python/dump_golden.py fixtures/local",
+    "desktop": "npm run tauri -w @sprechbuch/desktop -- dev"
+  }
+}
