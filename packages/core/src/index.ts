@@ -30,9 +30,12 @@ export { bookStats, REVIEW_THRESHOLD, type BookStats } from "./book/stats.js";
 // Bearbeiten
 export {
   applyBookPatches, applyEdit, describeEdit, EditError, setProgress,
-  type Edit, type EditResult, type MarkInput, type Patch,
+  type Edit, type EditResult, type MarkInput, type Patch, type PronunciationSuggestion, type SpeakerSuggestion,
 } from "./edit/edits.js";
 export {
   buildLookup, endOf, needsReview, reviewQueue, slotOf, startOf, type BlockRef, type BookLookup,
 } from "./edit/lookup.js";
 export { rebaseEdits, remapEdit, type JournalEntry, type RebaseResult } from "./edit/rebase.js";
+
+// KI
+export * from "./llm/index.js";

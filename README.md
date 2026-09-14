@@ -7,9 +7,9 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 3 (Desktop).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus
-> und sicheres Speichern mit Cloud-Sync-Abgleich sind fertig und getestet. Installer und Updates
-> werden zusammen mit macOS neu gedacht; danach folgt die KI-Unterstützung – siehe
+> **Status: Phase 4 (KI).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus,
+> sicheres Speichern mit Cloud-Sync-Abgleich und optionale KI-Unterstützung sind fertig und
+> getestet. Installer und Updates werden zusammen mit macOS neu gedacht – siehe
 > [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
@@ -54,15 +54,28 @@ getroffene Entscheidungen überschreibt keine automatische Analyse.
 - `.hbook`-Dateien öffnen per Doppelklick, „Öffnen mit“ oder Hineinziehen; eine bereits laufende
   App übernimmt die Datei.
 
-Alles läuft lokal. Es wird nichts hochgeladen.
+**KI – optional, mit eigenem Zugang**
+
+- Anthropic (Claude), OpenAI, OpenRouter, eigene Endpunkte oder **lokale Modelle** (Ollama,
+  LM Studio), bei denen der Text den Rechner nicht verlässt.
+- Die KI prüft nur, wo die Regeln unsicher sind: **Sprecherzuordnung**, **doppelte Figuren**
+  (Vorschläge zum Bestätigen), **Aussprache** (als ungeprüfter Vorschlag). Abweichungen landen mit
+  Begründung in der Prüfung und lassen sich mit <kbd>V</kbd> übernehmen.
+- Vor jedem Lauf: Kostenschätzung und Obergrenze. Pro Buch muss man ausdrücklich erlauben, dass
+  Text an den Anbieter geht.
+- Der Schlüssel liegt im Schlüsselspeicher des Betriebssystems und geht nur an die Adresse, für
+  die er gespeichert wurde.
+
+Ohne KI eingerichtet läuft alles lokal, es wird nichts hochgeladen.
 
 ## Aufbau
 
 ```
 packages/core     Import, Analyse, Buchformat, Bearbeitungsbefehle – läuft in Browser, Worker und Node
-packages/cli      Kommandozeile: sprechbuch import | info | validate | export-json | import-json
+packages/cli      Kommandozeile: sprechbuch import | info | validate | export-json | import-json | ai | eval
 apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Tauri als Web-App
 reference/python  Python-Prototyp als Referenz für Paritätstests
+tools/fake-llm    KI-Attrappe für Entwicklung und Tests (Anthropic- und OpenAI-Protokoll, ohne Kosten)
 docs/             Plan, Buchformat
 fixtures/local    lokale Testbücher (nicht im Repository)
 ```
@@ -87,6 +100,25 @@ Kommandozeile:
 npm run build:cli
 node packages/cli/dist/cli.js import mein-buch.epub
 node packages/cli/dist/cli.js info mein-buch.hbook
+```
+
+KI über die Kommandozeile (Schlüssel aus `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`OPENROUTER_API_KEY` oder `SPRECHBUCH_API_KEY`):
+
+```bash
+node packages/cli/dist/cli.js ai mein-buch.hbook --model claude-sonnet-5 --chapters 2-5
+```
+
+Qualität an einem in der App geprüften Buch messen – nur Regeln bzw. Regeln + KI:
+
+```bash
+node packages/cli/dist/cli.js eval mein-buch.hbook --provider anthropic
+```
+
+Ohne echten Anbieter entwickeln – die Attrappe spricht beide Protokolle:
+
+```bash
+node tools/fake-llm.mjs --port 8787 --key test
 ```
 
 Desktop-Installer bauen (unsigniert – Windows zeigt beim ersten Start eine SmartScreen-Warnung):

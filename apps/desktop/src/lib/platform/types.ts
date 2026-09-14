@@ -3,6 +3,7 @@
  * Oberfläche und Kern kennen weder Tauri noch den Browser – dadurch läuft
  * dieselbe App als Desktop-Anwendung und als (lokale oder gehostete) Web-App.
  */
+import type { Transport } from "@sprechbuch/core";
 
 /** Fingerabdruck einer Datei auf der Platte – daran werden fremde Änderungen erkannt. */
 export interface FileStamp {
@@ -67,8 +68,25 @@ export interface DesktopFiles {
   ask(message: string, buttons: { yes: string; no: string; cancel: string }, title?: string): Promise<"yes" | "no" | "cancel">;
 }
 
+export interface AiKeyStatus {
+  baseUrl: string;
+  /** letzte vier Zeichen */
+  hint: string;
+}
+
+/** KI-Zugang: Schlüsselverwaltung und Transport, der den Schlüssel anhängt */
+export interface AiBridge {
+  /** Desktop: Tresor des Betriebssystems; Web: nur bis zum Schließen der Seite im Arbeitsspeicher */
+  readonly keyStorage: "os" | "memory";
+  keyStatus(provider: string): Promise<AiKeyStatus | null>;
+  setKey(provider: string, baseUrl: string, key: string): Promise<void>;
+  deleteKey(provider: string): Promise<void>;
+  transport: Transport;
+}
+
 export interface Platform {
   readonly kind: "tauri" | "web";
+  readonly ai: AiBridge;
   /** Kann an einen bekannten Pfad zurückschreiben (Desktop) – im Web wird jedes Mal heruntergeladen. */
   readonly canOverwrite: boolean;
   /** Nur Desktop */

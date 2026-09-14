@@ -6,6 +6,8 @@
  *   sprechbuch export-json <buch.hbook> [-o buch.json]
  *   sprechbuch import-json <buch.json> [-o buch.hbook] [--source original.epub]
  *   sprechbuch validate <buch.hbook|buch.json>
+ *   sprechbuch ai <buch.hbook> [--provider anthropic] [--model …]
+ *   sprechbuch eval <geprüft.hbook> [--provider …]
  */
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -13,8 +15,9 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
   bookFromJson, BookFormatError, bookStats, bookToJson, importBook, MARKER_SLOTS, QUOTE_STYLES,
-  readHbook, UnsupportedFormatError, VERSION, writeHbook, type Book, type ImportStage, type PdfJsLike,
+  LlmError, readHbook, UnsupportedFormatError, VERSION, writeHbook, type Book, type ImportStage, type PdfJsLike,
 } from "@sprechbuch/core";
+import { AI_HELP, accuracyTable, compareSpeakers, runAi, type AiArgs } from "./ai.js";
 
 const HELP = `Sprechbuch ${VERSION} – Bücher als Leseskript für die Hörbuch-Aufnahme
 
@@ -29,6 +32,7 @@ Befehle:
   export-json <buch.hbook> [-o buch.json]
   import-json <buch.json> [-o buch.hbook] [--source original]
   validate <datei>      .hbook oder .json prüfen
+${AI_HELP}
 
 Allgemein:
   --json                Ausgabe als JSON (info, validate)
@@ -45,6 +49,7 @@ const VIA_LABEL: Record<string, string> = {
   inquit_paragraph: "Inquit weiter vorn im Absatz",
   proximity: "Nähe (geraten)",
   alternation: "Wechselrede (geraten)",
+  llm: "KI",
   unknown: "nicht zugeordnet",
   user: "manuell",
 };
@@ -119,6 +124,15 @@ async function main(argv: string[]): Promise<number> {
       "no-source": { type: "boolean" },
       source: { type: "string" },
       json: { type: "boolean" },
+      provider: { type: "string" },
+      model: { type: "string" },
+      "base-url": { type: "string" },
+      tasks: { type: "string" },
+      "max-cost": { type: "string" },
+      "price-in": { type: "string" },
+      "price-out": { type: "string" },
+      "merge-cast": { type: "boolean" },
+      yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -187,6 +201,39 @@ async function main(argv: string[]): Promise<number> {
       else console.log(`✓ gültig – Format ${book.schemaVersion}, ${s.chapters} Kapitel, ${fmt(book.annotations.length)} Markierungen`);
       return 0;
     }
+    case "ai": {
+      const { book, source } = await readBook(input);
+      const result = await runAi(book, values as AiArgs);
+      if (!result || result === book) return result ? 0 : 1;
+      const target = values.out ? abs(values.out) : input;
+      await writeAtomic(target, await writeHbook(result, source));
+      console.log(`✓ ${target}`);
+      return 0;
+    }
+    case "eval": {
+      const { book: reference, source } = await readBook(input);
+      if (!source) throw new UsageError("Das Buch enthält keine eingebettete Quelldatei – ohne sie lässt sich die reine Regel-Fassung nicht erzeugen.");
+      if (!reference.annotations.some((a) => a.type === "speech" && a.origin === "user")) {
+        throw new UsageError("Das Buch enthält noch keine eigenen Entscheidungen – erst in der App prüfen.");
+      }
+      const pdf = reference.meta.source.format === "pdf" ? await loadPdfjs() : null;
+      process.stderr.write("· Regel-Fassung neu erzeugen\n");
+      const { book: rules } = await importBook(source, reference.meta.source.fileName, {
+        ...(pdf ? { pdfjs: pdf.pdfjs, pdfjsParams: pdf.params } : {}),
+        ...(QUOTE_STYLES[reference.meta.quoteStyle.name as keyof typeof QUOTE_STYLES] ? { quoteStyle: QUOTE_STYLES[reference.meta.quoteStyle.name as keyof typeof QUOTE_STYLES] } : {}),
+      });
+      const rows: [string, ReturnType<typeof compareSpeakers>][] = [["nur Regeln", compareSpeakers(reference, rules)]];
+      if (values.provider) {
+        // Nur Kapitel mit geprüften Redeteilen fragen – spart Kosten
+        const refChapters = new Set(reference.annotations.filter((a) => a.type === "speech" && a.origin === "user")
+          .map((a) => reference.chapters.find((c) => c.blocks.some((b) => b.id === a.block))?.title));
+        const chapters = rules.chapters.map((c, i) => (refChapters.has(c.title) ? i + 1 : 0)).filter(Boolean).join(",");
+        const withAi = await runAi(rules, { ...(values as AiArgs), tasks: "speakers", chapters });
+        if (withAi) rows.push([`Regeln + KI`, compareSpeakers(reference, withAi)]);
+      }
+      console.log(values.json ? JSON.stringify(Object.fromEntries(rows), null, 2) : accuracyTable(rows));
+      return 0;
+    }
     default:
       throw new UsageError(`Unbekannter Befehl: ${cmd}`);
   }
@@ -194,22 +241,35 @@ async function main(argv: string[]): Promise<number> {
 
 class UsageError extends Error {}
 
+/** Offene HTTP-Verbindungen von fetch schließen – sonst bricht Node unter Windows beim Beenden mit einer Assertion ab */
+async function closeHttp(): Promise<void> {
+  const dispatcher = (globalThis as Record<symbol, { close?: () => Promise<void> } | undefined>)[Symbol.for("undici.globalDispatcher.1")];
+  await dispatcher?.close?.().catch(() => {});
+}
+
 main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
-  (err: unknown) => {
+  async (code) => {
+    await closeHttp();
+    // Nicht process.exit(): Node soll offene Handles selbst sauber schließen
+    process.exitCode = code;
+  },
+  async (err: unknown) => {
+    await closeHttp();
     if (err instanceof UsageError) {
-      console.error(`Fehler: ${err.message}\n\n${HELP}`);
-      process.exit(2);
-    }
-    if (err instanceof BookFormatError || err instanceof UnsupportedFormatError) {
-      console.error(`Fehler: ${err.message}`);
-      process.exit(1);
-    }
-    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      console.error(`Fehler: ${err.message}
+
+${HELP}`);
+      process.exitCode = 2;
+    } else if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
       console.error(`Fehler: Datei nicht gefunden: ${(err as NodeJS.ErrnoException).path}`);
-      process.exit(1);
+      process.exitCode = 1;
+    } else if (err instanceof BookFormatError || err instanceof UnsupportedFormatError || err instanceof LlmError
+      || (err instanceof Error && err.constructor === Error)) {
+      console.error(`Fehler: ${err.message}`);
+      process.exitCode = 1;
+    } else {
+      console.error(err);
+      process.exitCode = 1;
     }
-    console.error(err);
-    process.exit(1);
   },
 );

@@ -104,6 +104,19 @@ export const SpeechAnnotation = z.looseObject({
   via: z.string().nullable().optional(),
   /** Setzt eine offene Rede aus dem vorigen Absatz fort. */
   continued: z.boolean().optional(),
+  /**
+   * Abweichende Einschätzung, die in der Prüfung angeboten wird – z. B. die KI sieht eine andere
+   * Figur als die Regeln, oder die KI hat übernommen und die Regel-Zuordnung bleibt als Alternative.
+   */
+  suggestion: z.looseObject({
+    speaker: id.nullable(),
+    confidence,
+    source: z.enum(["rule", "llm"]),
+    /** Keine direkte Rede (Titel, Schild, zitiertes Wort) */
+    notSpeech: z.boolean().optional(),
+    /** Kurze Begründung */
+    note: z.string().optional(),
+  }).optional(),
 });
 export type SpeechAnnotation = z.infer<typeof SpeechAnnotation>;
 

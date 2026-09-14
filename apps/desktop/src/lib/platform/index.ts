@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import type { Platform } from "./types";
 
-export type { DesktopFiles, FileKind, FileStamp, PickedFile, Platform, SaveBookOptions } from "./types";
+export type { AiBridge, AiKeyStatus, DesktopFiles, FileKind, FileStamp, PickedFile, Platform, SaveBookOptions } from "./types";
 export { baseName, FileConflictError, FileMissingError, isAbsolutePath, siblingPath } from "./types";
 export { readBrowserFile } from "./file";
 

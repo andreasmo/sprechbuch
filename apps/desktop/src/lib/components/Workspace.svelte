@@ -6,7 +6,9 @@
   import type { Platform } from "../platform";
   import { sentenceAt } from "../render";
   import type { BookSession } from "../store/session.svelte";
+  import { aiDialog } from "../store/ai.svelte";
   import { settings } from "../store/settings.svelte";
+  import AiSettingsDialog from "./AiSettingsDialog.svelte";
   import Editor from "./Editor.svelte";
   import FileConflictPanel from "./FileConflictPanel.svelte";
   import Help from "./Help.svelte";
@@ -173,6 +175,7 @@
               <input type="checkbox" bind:checked={settings.autosaveFile} /> Automatisch speichern
             </label>
           {/if}
+          <button class="ghost" onclick={() => (aiDialog.open = true)}>KI einrichten …</button>
           <button class="ghost" onclick={() => session.exportJson()}>Als JSON exportieren</button>
           <button class="ghost" onclick={onClose}>Schließen</button>
         </div>
@@ -205,6 +208,10 @@
     <Popover x={settingsPop.x} y={settingsPop.y} onClose={() => (settingsPop = null)} width={25}>
       <ViewSettings />
     </Popover>
+  {/if}
+
+  {#if aiDialog.open}
+    <AiSettingsDialog {platform} onClose={() => (aiDialog.open = false)} />
   {/if}
 
   {#if helpOpen}

@@ -43,6 +43,13 @@
   }
 
   const confirm = () => item && decide({ type: "confirmSpeech", ids: [item.id] });
+  /** Vorschlag übernehmen: andere Figur oder „keine Rede“ */
+  const takeSuggestion = () => {
+    const s = item?.suggestion;
+    if (!item || !s) return;
+    if (s.notSpeech) noSpeech();
+    else if (s.speaker && session.lookup.cast.has(s.speaker)) assign(s.speaker);
+  };
   const assign = (speaker: string) => item && decide({ type: "setSpeaker", ids: [item.id], speaker });
   const noSpeech = () => item && decide({ type: "removeAnnotation", id: item.id });
   const skip = (d: number) => (index = Math.min(Math.max(0, pos + d), Math.max(0, queue.length - 1)));
@@ -56,6 +63,7 @@
       const c = choices[Number(k) - 1];
       if (c) assign(c.id);
     } else if (k === "Delete" || k === "n" || k === "N") noSpeech();
+    else if ((k === "v" || k === "V") && item.suggestion) takeSuggestion();
     else if (k === "ArrowRight" || k === "s" || k === "S") skip(1);
     else if (k === "ArrowLeft") skip(-1);
     else return;
@@ -102,6 +110,21 @@
         {:else}<strong>keine Figur</strong>{/if}
         <span class="muted">· {viaLabel(item)} · {Math.round(item.confidence * 100)} %</span>
       </p>
+      {#if item.suggestion}
+        {@const s = item.suggestion}
+        <p class="alt">
+          <span class="alt-label">{s.source === "llm" ? "KI meint" : "Regeln meinten"}:</span>
+          {#if s.notSpeech}<strong>keine direkte Rede</strong>
+          {:else if s.speaker}
+            {@const slot = slotOf(session.book, ref.chapter.id, s.speaker, session.lookup.cast)}
+            <mark class="sp" style="--mark: {markVar(slot)}; --strong: {strongVar(slot)}">{castName(s.speaker)}</mark>
+          {/if}
+          <span class="muted">· {Math.round(s.confidence * 100)} %{s.note ? ` · ${s.note}` : ""}</span>
+          {#if s.notSpeech || (s.speaker && session.lookup.cast.has(s.speaker))}
+            <button class="small" onclick={takeSuggestion}>Übernehmen <kbd>V</kbd></button>
+          {/if}
+        </p>
+      {/if}
 
       <div class="actions">
         {#if item.speaker}
@@ -144,6 +167,9 @@
   .context { padding: 1.2rem 1.4rem; }
   .guess { padding: 1rem 1.2rem; display: grid; gap: 0.7rem; }
   .guess p { margin: 0; }
+  .alt { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; padding: 0.45rem 0.6rem; border-radius: 8px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .alt-label { font-weight: 600; }
+  .alt button { padding: 0.15rem 0.55rem; }
   .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
   .actions button { display: inline-flex; align-items: center; gap: 0.4rem; }
   .actions button.current { border-color: var(--accent); }

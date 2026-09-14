@@ -4,6 +4,7 @@
   import { markVar, strongVar } from "../markers";
   import type { MarkRow } from "../marks";
   import type { BookSession } from "../store/session.svelte";
+  import AiPanel from "./AiPanel.svelte";
   import MarksList from "./MarksList.svelte";
   import Popover from "./Popover.svelte";
 
@@ -20,6 +21,7 @@
   const GROUPS = [
     { key: "sure", label: "sicher", hint: "Inquit direkt an der Rede", vias: ["inquit_after", "inquit_before"], color: "var(--ok)" },
     { key: "user", label: "von dir", hint: "geprüft oder gesetzt", vias: ["user"], color: "var(--accent)" },
+    { key: "llm", label: "KI", hint: "von der KI zugeordnet", vias: ["llm"], color: "color-mix(in srgb, var(--ok) 55%, var(--accent))" },
     { key: "derived", label: "abgeleitet", hint: "Absatz, Pronomen, Fortsetzung", vias: ["same_paragraph", "continuation", "pronoun", "inquit_paragraph"], color: "color-mix(in srgb, var(--accent) 45%, var(--muted))" },
     { key: "guessed", label: "geraten", hint: "Nähe, Wechselrede", vias: ["proximity", "alternation"], color: "var(--warn)" },
     { key: "open", label: "offen", hint: "keine Figur", vias: ["unknown"], color: "var(--danger)" },
@@ -65,7 +67,7 @@
     </div>
     <ul class="legend">
       {#each groups as g (g.key)}
-        {#if g.n || g.key !== "user"}
+        {#if g.n || (g.key !== "user" && g.key !== "llm")}
           <li>
             <span class="dot" style="background: {g.color}"></span>
             <span><strong>{g.label}</strong> <span class="muted">– {g.hint}</span></span>
@@ -76,6 +78,8 @@
       {/each}
     </ul>
   </section>
+
+  <AiPanel {session} {onReview} />
 
   <section class="panel card">
     <div class="card-head">
@@ -138,7 +142,7 @@
           <tbody>
             {#each pron as p (p.term)}
               <tr class:verified={p.verified}>
-                <td><strong>{p.term}</strong></td>
+                <td><strong>{p.term}</strong>{#if p.origin === "llm" && !p.verified}<span class="ai-tag" title="Vorschlag der KI – bitte prüfen">KI</span>{/if}</td>
                 <td class="muted small">{KIND[p.kind] ?? p.kind}</td>
                 <td class="num tabular">{fmt(p.count)}</td>
                 <td><input value={p.hint} placeholder="z. B. Ko-ba-LA-ba" aria-label="Aussprache von {p.term}"
@@ -229,4 +233,5 @@
   .palette button.active { box-shadow: inset 0 0 0 2px var(--accent); }
   .swatch.big { width: 1.5rem; height: 1.5rem; }
   .wide { width: 100%; margin-top: 0.4rem; }
+  .ai-tag { margin-left: 0.4rem; font: 700 0.62rem/1 var(--ui); padding: 0.12rem 0.3rem; border-radius: 0.25rem; background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); vertical-align: 0.1rem; }
 </style>

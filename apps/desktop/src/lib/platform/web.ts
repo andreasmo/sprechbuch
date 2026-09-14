@@ -1,9 +1,43 @@
 import { readBrowserFile } from "./file";
-import { ACCEPT, type FileKind, type Platform } from "./types";
+import { ACCEPT, type AiBridge, type FileKind, type Platform } from "./types";
+
+/** Web: Schlüssel nur im Arbeitsspeicher dieser Seite – nach dem Neuladen neu eingeben */
+const keys = new Map<string, { baseUrl: string; key: string }>();
+
+const ai: AiBridge = {
+  keyStorage: "memory",
+  async keyStatus(provider) {
+    const k = keys.get(provider);
+    return k ? { baseUrl: k.baseUrl, hint: k.key.slice(-4) } : null;
+  },
+  async setKey(provider, baseUrl, key) {
+    keys.set(provider, { baseUrl: baseUrl.replace(/\/+$/, ""), key: key.trim() });
+  },
+  async deleteKey(provider) {
+    keys.delete(provider);
+  },
+  async transport(req, signal) {
+    const headers: Record<string, string> = { ...req.headers };
+    const stored = keys.get(req.provider);
+    if (req.auth !== "none") {
+      if (!stored) return { status: 401, body: JSON.stringify({ error: { message: "Kein Schlüssel eingegeben." } }) };
+      if (!req.url.startsWith(stored.baseUrl)) return { status: 403, body: JSON.stringify({ error: { message: `Der Schlüssel gilt nur für ${stored.baseUrl}.` } }) };
+      if (req.auth === "x-api-key") {
+        headers["x-api-key"] = stored.key;
+        // Anthropic erlaubt Browser-Anfragen nur mit diesem ausdrücklichen Hinweis
+        headers["anthropic-dangerous-direct-browser-access"] = "true";
+      } else headers.authorization = `Bearer ${stored.key}`;
+    }
+    const res = await fetch(req.url, { method: req.method, headers, ...(req.body ? { body: req.body } : {}), ...(signal ? { signal } : {}) });
+    const retry = Number(res.headers.get("retry-after"));
+    return { status: res.status, body: await res.text(), ...(retry > 0 ? { retryAfter: retry } : {}) };
+  },
+};
 
 export const webPlatform: Platform = {
   kind: "web",
   canOverwrite: false,
+  ai,
 
   pickFile(kind: FileKind) {
     return new Promise((resolve) => {

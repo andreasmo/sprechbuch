@@ -9,6 +9,7 @@ export const VIA_LABEL: Record<string, string> = {
   inquit_paragraph: "Inquit weiter vorn im Absatz",
   proximity: "Nähe – geraten",
   alternation: "Wechselrede – geraten",
+  llm: "von der KI zugeordnet",
   unknown: "keine Zuordnung",
   user: "von dir festgelegt",
 };
@@ -26,6 +27,7 @@ export const MARK_LABEL: Record<Annotation["type"], string> = {
 
 export function viaLabel(a: Extract<Annotation, { type: "speech" }>): string {
   if (a.origin === "user") return VIA_LABEL.user!;
+  if (a.origin === "llm" && a.via !== "llm") return `${VIA_LABEL[a.via ?? "unknown"] ?? a.via}, von der KI bestätigt`;
   return VIA_LABEL[a.via ?? "unknown"] ?? a.via ?? "";
 }
 

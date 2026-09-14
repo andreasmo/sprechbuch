@@ -5,8 +5,40 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import {
-  ACCEPT, baseName, FileConflictError, FileMissingError, type DesktopFiles, type FileKind, type FileStamp, type Platform,
+  ACCEPT, baseName, FileConflictError, FileMissingError, type AiBridge, type AiKeyStatus, type DesktopFiles, type FileKind, type FileStamp, type Platform,
 } from "./types";
+
+const aiMessage = (err: unknown) =>
+  err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
+
+/** Schlüssel im OS-Tresor; Anfragen laufen über Rust (`src-tauri/src/ai.rs`), das den Schlüssel anhängt */
+const ai: AiBridge = {
+  keyStorage: "os",
+  async keyStatus(provider) {
+    return invoke<AiKeyStatus | null>("ai_key_status", { provider });
+  },
+  async setKey(provider, baseUrl, key) {
+    try {
+      await invoke("ai_key_set", { provider, baseUrl, key });
+    } catch (err) {
+      throw new Error(aiMessage(err));
+    }
+  },
+  async deleteKey(provider) {
+    await invoke("ai_key_delete", { provider });
+  },
+  async transport(req) {
+    try {
+      return await invoke<{ status: number; body: string; retryAfter?: number }>("ai_http", { request: req });
+    } catch (err) {
+      const kind = err && typeof err === "object" && "kind" in err ? (err as { kind: string }).kind : "";
+      // Fehlender Schlüssel oder gesperrte Adresse sind endgültig – als Antwort melden, damit nicht wiederholt wird
+      if (kind === "noKey") return { status: 401, body: JSON.stringify({ error: { message: aiMessage(err) } }) };
+      if (kind === "forbidden") return { status: 403, body: JSON.stringify({ error: { message: aiMessage(err) } }) };
+      throw new Error(aiMessage(err));
+    }
+  },
+};
 
 /** Fehler aus den Rust-Befehlen (`src-tauri/src/files.rs`) in Klassen übersetzen */
 function fileError(err: unknown): Error {
@@ -98,6 +130,7 @@ export const tauriPlatform: Platform = {
   kind: "tauri",
   canOverwrite: true,
   files,
+  ai,
 
   async pickFile(kind: FileKind) {
     const path = await open({

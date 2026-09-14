@@ -44,7 +44,31 @@ export type Edit =
   | { type: "updateCast"; id: string; name?: string; voiceNote?: string; gender?: CastEntry["gender"]; badge?: string; aliases?: string[] }
   | { type: "setCastColor"; id: string; color: number | null }
   | { type: "mergeCast"; from: string; into: string }
-  | { type: "updatePronunciation"; term: string; hint?: string; ipa?: string; verified?: boolean };
+  | { type: "updatePronunciation"; term: string; hint?: string; ipa?: string; verified?: boolean }
+  /** Ergebnisse der KI-Sprecherprüfung einarbeiten (keine Nutzerentscheidung) */
+  | { type: "applySpeakerSuggestions"; model: string; items: SpeakerSuggestion[] }
+  /** Aussprachevorschläge der KI eintragen (ungeprüft) */
+  | { type: "applyPronunciationSuggestions"; model: string; items: PronunciationSuggestion[] };
+
+/** Einschätzung eines Sprachmodells zu einer Redepassage. */
+export interface SpeakerSuggestion {
+  /** Annotation-ID der Rede */
+  id: string;
+  /** Figur-ID aus der Figurenliste, null wenn unbekannt */
+  speaker: string | null;
+  /** Figur, die noch nicht in der Liste steht */
+  newFigure?: string;
+  /** Keine direkte Rede (Titel, Schild, zitiertes Wort) */
+  notSpeech?: boolean;
+  confidence: number;
+  note?: string;
+}
+
+export interface PronunciationSuggestion {
+  term: string;
+  hint: string;
+  ipa?: string;
+}
 
 export interface EditResult {
   book: Book;
@@ -76,6 +100,8 @@ const LABELS: Record<Edit["type"], string> = {
   setCastColor: "Farbe geändert",
   mergeCast: "Figuren zusammengeführt",
   updatePronunciation: "Aussprache geändert",
+  applySpeakerSuggestions: "KI-Sprecherprüfung eingearbeitet",
+  applyPronunciationSuggestions: "KI-Aussprachevorschläge eingetragen",
 };
 
 const MARK_LABELS: Record<MarkInput["type"], string> = {
@@ -217,6 +243,7 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
         a.speaker = edit.speaker;
         a.origin = "user";
         a.confidence = 1;
+        delete a.suggestion;
       }
       normalizeChapterColors(book);
       return;
@@ -226,6 +253,7 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
         const a = findSpeech(book, id);
         a.origin = "user";
         a.confidence = 1;
+        delete a.suggestion;
       }
       return;
     }
@@ -252,6 +280,7 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
       if (leftEnd <= a.start || rightStart >= a.end) throw new EditError("Rede kann hier nicht geteilt werden.");
       const oldEnd = a.end;
       a.end = leftEnd;
+      delete a.suggestion;
       const id = nextAnnotationId(book);
       book.annotations.push({
         type: "speech", id, block: a.block, start: rightStart, end: oldEnd, speaker: edit.speaker,
@@ -374,6 +403,23 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
       normalizeChapterColors(book);
       return;
     }
+    case "applySpeakerSuggestions": {
+      for (const item of edit.items) mergeSpeakerSuggestion(book, item);
+      normalizeChapterColors(book);
+      return;
+    }
+    case "applyPronunciationSuggestions": {
+      for (const item of edit.items) {
+        const p = book.pronunciations.find((x) => x.term === item.term);
+        const hint = item.hint.trim();
+        // Eigene Angaben bleiben unangetastet
+        if (!p || p.origin === "user" || p.verified || !hint) continue;
+        p.hint = hint;
+        if (item.ipa?.trim()) p.ipa = item.ipa.trim();
+        p.origin = "llm";
+      }
+      return;
+    }
     case "updatePronunciation": {
       const p = book.pronunciations.find((x) => x.term === edit.term);
       if (!p) throw new EditError(`Unbekannter Eintrag: ${edit.term}`);
@@ -383,6 +429,69 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
       p.origin = "user";
       return;
     }
+  }
+}
+
+/** Ab hier gilt eine Regel-Zuordnung als sicher (Inquit direkt an der Rede). */
+const RULE_SURE = 0.9;
+/** So viel sicherer muss die KI sein, um eine unsichere Regel-Zuordnung zu ersetzen. */
+const LLM_MARGIN = 0.15;
+/** Zugeordnet, aber zur Prüfung – unterhalb der Prüfschwelle (REVIEW_THRESHOLD = 0,5). */
+const QUEUED = 0.45;
+/** Erst eine so sichere Gegenmeinung der KI schickt eine Regel-Zuordnung in die Prüfung. */
+const LLM_OBJECTION = 0.7;
+
+const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+
+/**
+ * KI-Einschätzung mit der bestehenden Zuordnung verbinden:
+ * - Nutzerentscheidungen bleiben unangetastet.
+ * - Einig → Konfidenz steigt, Rede verlässt die Prüfung.
+ * - Uneinig, Regel unsicher und KI deutlich sicherer → KI übernimmt, Regel bleibt als Alternative.
+ * - Sonst bleibt die Regel und die KI-Meinung hängt als Vorschlag daran. In die Prüfung kommt die
+ *   Rede nur, wenn die KI sich sicher ist – ein Raten des Modells soll die Warteschlange nicht fluten.
+ * - „Keine Rede“ entfernt nichts, sondern schlägt es vor (ebenfalls nur sicher → Prüfung).
+ */
+function mergeSpeakerSuggestion(book: Draft<Book>, item: SpeakerSuggestion): void {
+  const a = book.annotations.find((x) => x.id === item.id);
+  if (!a || a.type !== "speech" || a.origin === "user") return;
+  const lc = clamp01(item.confidence);
+  const note = item.note?.trim() || undefined;
+
+  if (item.notSpeech) {
+    a.suggestion = { speaker: null, confidence: lc, source: "llm", notSpeech: true, ...(note ? { note } : {}) };
+    if (lc >= LLM_OBJECTION) a.confidence = Math.min(a.confidence, QUEUED);
+    return;
+  }
+
+  let target = item.speaker && book.cast.some((c) => c.id === item.speaker) ? item.speaker : null;
+  const newName = item.newFigure?.trim().replace(/\s+/g, " ");
+  if (!target && newName) {
+    const key = newName.toLowerCase();
+    const existing = book.cast.find((c) => c.name.toLowerCase() === key || c.aliases.some((x) => x.toLowerCase() === key));
+    if (existing) target = existing.id;
+    else {
+      target = uniqueCastId(book, newName);
+      book.cast.push({ id: target, name: newName, aliases: [], gender: "?", color: null, badge: initials(newName), voiceNote: "", kind: "name", origin: "llm" });
+    }
+  }
+  if (!target) return;
+
+  const rc = a.confidence;
+  if (target === a.speaker) {
+    a.confidence = Math.min(0.97, 1 - (1 - rc) * (1 - lc));
+    a.origin = "llm";
+    delete a.suggestion;
+  } else if (rc < RULE_SURE && lc >= rc + LLM_MARGIN) {
+    a.suggestion = a.speaker ? { speaker: a.speaker, confidence: rc, source: "rule" } : undefined;
+    if (!a.suggestion) delete a.suggestion;
+    a.speaker = target;
+    a.origin = "llm";
+    a.via = "llm";
+    a.confidence = lc >= 0.8 ? Math.round(lc * 90) / 100 : Math.min(lc, QUEUED);
+  } else {
+    a.suggestion = { speaker: target, confidence: lc, source: "llm", ...(note ? { note } : {}) };
+    if (lc >= LLM_OBJECTION) a.confidence = Math.min(rc, QUEUED);
   }
 }
 

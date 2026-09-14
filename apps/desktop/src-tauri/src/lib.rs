@@ -1,3 +1,4 @@
+mod ai;
 mod files;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,11 +23,16 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(files::OpenedFiles::default())
+        .manage(ai::HttpClient::new())
         .invoke_handler(tauri::generate_handler![
             files::book_file_read,
             files::book_file_stamp,
             files::book_file_write,
             files::take_opened_files,
+            ai::ai_key_status,
+            ai::ai_key_set,
+            ai::ai_key_delete,
+            ai::ai_http,
         ])
         .setup(|app| {
             let cwd = std::env::current_dir().unwrap_or_default();

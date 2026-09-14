@@ -23,7 +23,7 @@ Stand: 14.09.2026
 | **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus mit allen Funktionen des früheren Studio-Readers (Prompter, Satzvorschau, Fortschritt, Seitenmodus, Suche, Figur isolieren, Satznummern, Atemstellen, Timer); Markierungsliste mit CSV-Export; Autosave (IndexedDB); JSON-Import/-Export in der App | **erledigt** |
 | **3 – Desktop** | atomares Speichern (Vorschlag neben der Quelle), automatisches Speichern in die Datei, Erkennung fremder Änderungen (Cloud-Sync) mit **Zusammenführen**, `.hbook`-Dateiverknüpfung, Öffnen per Doppelklick/„Öffnen mit“/Drag & Drop, eine Instanz, Nachfrage beim Schließen | **erledigt** |
 | **3b – Verteilung Desktop** | Installer (Windows, macOS, Linux) und Updates – **zurückgestellt**, wird zusammen mit macOS neu gedacht | offen |
-| **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | offen |
+| **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | **erledigt** |
 | **5 – Verteilung** | Release-Seite, Web-Version hosten, Tablet-Nutzung in der Kabine (Web-App/PWA mit `.hbook`) | offen |
 
 ## Ergebnis Phase 1
@@ -129,12 +129,81 @@ Nachladen, Konflikt mit Zusammenführen (beide Änderungen landen in der Datei),
 Programmstart, verschwundene Datei in einem Ordner mit Umlaut und Leerzeichen, Schließen per
 `WM_CLOSE`, Wiederherstellung und Zusammenführen nach einem harten Abbruch der App.
 
+## Ergebnis Phase 4
+
+**Grundsatz:** Regeln zuerst (kostenlos, offline, sofort), die KI nur dort, wo Regeln unsicher
+sind. Nutzerentscheidungen sind unantastbar. Keine Betonungs- oder Emotionsvorschläge – eine
+falsche Markierung liest die Sprecherin sonst ab.
+
+**Kern** (`packages/core/src/llm`, ohne Abhängigkeit von Tauri oder Browser):
+
+- **Zwei Protokolle, viele Anbieter:** Anthropic Messages API mit strukturierten Antworten
+  (`output_config.format`, JSON-Schema) und OpenAI-kompatibel (`/chat/completions`) für OpenAI,
+  OpenRouter, Ollama, LM Studio und eigene Endpunkte. Kann ein Server kein JSON-Schema, stuft der
+  Client selbst auf JSON-Modus bzw. reine Anweisung herunter. Vorlagen mit Preisen für Claude
+  Opus 5 (Standard), Sonnet 5, Haiku 4.5 und Fable 5.1.
+- **Robust:** Wiederholung bei 429/5xx (mit `retry-after`), sofortiger Abbruch bei falschem
+  Schlüssel, Erkennung abgeschnittener und abgelehnter Antworten, JSON auch aus Codeblöcken.
+- **Aufgaben:**
+  1. *Sprecher* – kapitelweise mit ganzem Kapitel als Kontext; nur unsichere Redeteile sind als
+     `⟦R12⟧` zu bestimmen, sichere stehen als `⟦Name⟧` zur Orientierung dabei (Wechselreden).
+     Sehr lange Kapitel werden mit Überlappung geteilt.
+  2. *Doppelte Figuren* – Vorschläge mit Begründung, Ketten werden aufgelöst; angewendet wird
+     erst nach Auswahl durch den Menschen.
+  3. *Aussprache* – deutsche Umschrift mit betonter Silbe, optional IPA, als „KI, ungeprüft“.
+- **Einarbeiten** (`applySpeakerSuggestions`, ein Rückgängig-Schritt je Kapitel): einig →
+  Konfidenz steigt; Regel unsicher und KI deutlich sicherer → KI übernimmt, Regel bleibt als
+  Vorschlag; KI widerspricht sicher (≥ 70 %) → zur Prüfung mit KI-Vorschlag; KI rät nur →
+  Vorschlag hängt dran, die Warteschlange bleibt ruhig. „Keine Rede“ wird nie automatisch
+  entfernt, nur vorgeschlagen.
+- **Kosten:** Schätzung vor jedem Lauf, Obergrenze je Lauf (startet keine weitere Anfrage),
+  tatsächlicher Verbrauch aus den Antworten.
+- **Qualität messen** (`compareSpeakers`): Ein geprüftes Buch ist ein Testsatz. Verglichen wird
+  mit einer frisch erzeugten Regel-Fassung und optional mit Regeln + KI; die Absätze werden über
+  ihren Text zugeordnet. Wichtigste Zahl: *still falsch* – falsch zugeordnet und nicht zur Prüfung
+  vorgesehen.
+
+**Desktop** (`apps/desktop/src-tauri/src/ai.rs`):
+
+- Schlüssel im Windows-Anmeldeinformationsspeicher, macOS-Schlüsselbund bzw. Secret Service.
+  Die Oberfläche sieht nur, *ob* einer da ist, und seine letzten vier Zeichen.
+- Anfragen laufen über Rust, das den Schlüssel erst dort anhängt (umgeht CORS, auch für Ollama).
+  Ein Schlüssel ist an die Adresse gebunden, für die er gespeichert wurde. Unverschlüsseltes HTTP
+  nur zu diesem Rechner oder ins lokale Netz. Zugangsheader aus der Oberfläche werden verworfen.
+- Web-Version: Schlüssel nur im Arbeitsspeicher der Seite.
+
+**App:** Einrichtungsdialog (Anbieter, Adresse, Schlüssel, Modell mit „Modelle laden“, Preise,
+Obergrenze, Verbindungstest), KI-Bereich in der Übersicht mit Einwilligung pro Buch („Text geht an
+api.anthropic.com“ – bei lokalen Modellen entfällt sie), Kapitelauswahl, Schätzung, Fortschritt,
+Abbrechen und Ergebnis. In der Prüfung und im Editor erscheint der Vorschlag mit „Übernehmen“
+(Taste `V`). Aussprachevorschläge sind in der Tabelle als „KI“ markiert.
+
+**Kommandozeile:** `sprechbuch ai buch.hbook` (Schlüssel aus der Umgebung, Schätzung,
+Rückfrage oder `--yes`) und `sprechbuch eval geprüft.hbook [--provider …]` für die
+Qualitätsmessung.
+
+**Geprüft:** 15 Kern-Tests (Anfragen beider Protokolle, Herunterstufen, Wiederholung,
+Auswertung, Einarbeitungsregeln, Figuren, Aussprache, Parallelität, Kostengrenze, Abbruch,
+Qualitätsmessung), Rust-Tests für Adress- und Schlüsselbindung – und mit einer KI-Attrappe
+(`tools/fake-llm.mjs`, beide Protokolle) in CLI und echter Desktop-App: Schlüssel in den Tresor,
+Verbindungstest über den Rust-Proxy, Sprecherprüfung über 12 Kapitel, Vorschlag mit `V`
+übernehmen, Figuren zusammenführen, Aussprachen und Rückgängig, Schlüssel geht nicht an eine fremde
+Adresse, Schlüssel steht weder in localStorage noch in IndexedDB.
+
+**Noch nicht gemessen:** die Qualität echter Modelle an einem vollständig geprüften Buch – dafür
+braucht es ein von Hand geprüftes Buch und einen Schlüssel. Ablauf: Buch in der App prüfen, dann
+`sprechbuch eval buch.hbook --provider anthropic --model claude-opus-5` (bzw. Sonnet, lokal).
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
   oben auf einer Seite ist nur am Einzug erkennbar.
-- Sprecherzuordnung: rund ein Drittel der Redeteile ist geraten (Nähe, Wechselrede) – dafür
-  kommen Prüf-Warteschlange (Phase 2) und KI (Phase 4).
+- Sprecherzuordnung: rund ein Drittel der Redeteile ist nach den Regeln geraten (Nähe,
+  Wechselrede). Prüf-Warteschlange und KI helfen; wie gut echte Modelle sind, ist noch nicht an einem
+  geprüften Buch gemessen.
+- KI: keine Batch-API (halber Preis, asynchron) und kein Prompt-Caching; ein laufender Auftrag
+  lässt sich abbrechen, die gerade laufende Anfrage wird aber noch zu Ende bezahlt. Die
+  Tokenschätzung ist grob (Zeichen ÷ 3).
 - In der Web-Version heißt Speichern Herunterladen – eine vorhandene Datei kann dort nicht
   überschrieben werden. Beim erneuten Öffnen erkennt die App die heruntergeladene Fassung am Hash
   wieder.

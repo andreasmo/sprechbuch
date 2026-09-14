@@ -46,6 +46,7 @@
         ["Enter", "Zuordnung stimmt"],
         ["1–9", "Andere Figur"],
         ["N / Entf", "Keine direkte Rede"],
+        ["V", "Vorschlag der KI übernehmen"],
         ["← / →", "Zurück / überspringen"],
       ],
     },

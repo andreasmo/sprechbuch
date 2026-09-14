@@ -105,7 +105,7 @@ Zusätzlich lässt sich `book.json` einzeln exportieren und wieder importieren
 
 | `type` | Felder | Bedeutung |
 |---|---|---|
-| `speech` | `start`, `end`, `speaker` (Figur-ID oder `null`), `confidence` 0–1, `via`, `continued?` | Direkte Rede |
+| `speech` | `start`, `end`, `speaker` (Figur-ID oder `null`), `confidence` 0–1, `via`, `continued?`, `suggestion?` | Direkte Rede |
 | `quote` | `start`, `end` | Zitat innerhalb einer Rede (›…‹) – erbt die Figur der umgebenden Rede |
 | `emphasis` | `start`, `end` | Betonung |
 | `retake` | `start`, `end`, `note?` | Stelle neu aufnehmen |
@@ -120,8 +120,21 @@ Alle tragen `id`, `block` und `origin`.
 
 In absteigender Verlässlichkeit: `inquit_after` (»…«, sagte X) · `inquit_before`
 (X sagte: »…«) · `same_paragraph` · `continuation` · `pronoun` (»…«, sagte er) ·
-`inquit_paragraph` · `proximity` · `alternation` · `unknown`. Die App zeigt alles unter
-`confidence` 0,5 als „zur Prüfung“.
+`inquit_paragraph` · `proximity` · `alternation` · `unknown`. `llm` heißt: die KI hat die Figur
+bestimmt. Die App zeigt alles unter `confidence` 0,5 als „zur Prüfung“.
+
+### `origin` und `suggestion` – Regeln, KI und Mensch
+
+- `origin: "rule"` – automatische Analyse. `"llm"` – von der KI bestimmt oder bestätigt.
+  `"user"` – Entscheidung des Menschen; wird von keiner Automatik überschrieben.
+- `suggestion` (optional) hält eine abweichende Einschätzung fest, die in der Prüfung angeboten
+  wird: `{ "speaker": "sanders" | null, "confidence": 0.85, "source": "llm" | "rule",
+  "notSpeech"?: true, "note"?: "Anrede Sandi → Sanders" }`.
+  - `source: "llm"`: Die Regel-Zuordnung bleibt, die KI sieht es anders.
+  - `source: "rule"`: Die KI hat übernommen, die frühere Regel-Zuordnung bleibt als Alternative.
+  - Eine Entscheidung des Menschen entfernt den Vorschlag.
+- Aussprachen mit `origin: "llm"` sind Vorschläge der KI und bleiben `verified: false`, bis der
+  Mensch sie abhakt.
 
 ## Farben
 

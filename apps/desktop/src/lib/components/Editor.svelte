@@ -108,6 +108,18 @@
       {#if speech && speech.type === "speech"}
         <h4>Rede · {castName(speech.speaker)}</h4>
         <p class="muted small meta">{viaLabel(speech)}{speech.origin !== "user" ? ` · ${Math.round(speech.confidence * 100)} %` : ""}</p>
+        {#if speech.suggestion}
+          {@const s = speech.suggestion}
+          <p class="small alt">
+            {s.source === "llm" ? "KI meint" : "Regeln meinten"}: <strong>{s.notSpeech ? "keine Rede" : castName(s.speaker)}</strong>
+            <span class="muted">{Math.round(s.confidence * 100)} %{s.note ? ` · ${s.note}` : ""}</span>
+            {#if s.notSpeech}
+              <button class="small" onclick={() => act({ type: "removeAnnotation", id: speech.id })}>Übernehmen</button>
+            {:else if s.speaker && session.lookup.cast.has(s.speaker)}
+              <button class="small" onclick={() => act({ type: "setSpeaker", ids: [speech.id], speaker: s.speaker })}>Übernehmen</button>
+            {/if}
+          </p>
+        {/if}
         <CastPicker {session} chapterId={chapter.id} current={speech.speaker} autofocus={!pop.alt}
           onPick={(id) => act({ type: "setSpeaker", ids: [speech.id], speaker: id })} />
         <div class="row">
@@ -175,6 +187,8 @@
   .page { padding: 1.4rem 1.6rem 3rem; }
   h4 { margin: 0.2rem 0 0.35rem; font-size: 0.92rem; }
   .meta { margin: -0.2rem 0 0.5rem; }
+  .alt { margin: -0.2rem 0 0.5rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .alt button { padding: 0.1rem 0.45rem; margin-left: 0.3rem; }
   .row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
   .mark { display: grid; gap: 0.35rem; border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.6rem; }
   .mark button { justify-self: start; }
