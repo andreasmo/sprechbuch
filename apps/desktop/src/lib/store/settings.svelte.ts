@@ -28,13 +28,15 @@ export interface Settings {
   legend: boolean;
   /** Seitenmodus (Blättern) statt Scrollen im Aufnahmemodus */
   paged: boolean;
+  /** Desktop: Änderungen selbsttätig in die .hbook-Datei schreiben, sobald sie einen Speicherort hat */
+  autosaveFile: boolean;
 }
 
 const KEY = "sprechbuch:settings";
 export const DEFAULTS: Settings = {
   theme: "auto", font: "serif", fontSize: 21, lineHeight: 1.8, columnWidth: 38, wordSpacing: 0, speech: "marker",
   badges: true, pipes: true, breath: false, warnLong: false, numbers: false, wpm: 150, focus: false, dimRead: true,
-  preview: true, legend: true, paged: false,
+  preview: true, legend: true, paged: false, autosaveFile: true,
 };
 
 export const FONT_STACK: Record<ReadFont, string> = {
@@ -72,8 +74,9 @@ $effect.root(() => {
   });
 });
 
+/** Darstellung zurücksetzen – das Speicherverhalten bleibt, wie es ist */
 export function resetSettings(): void {
-  Object.assign(settings, DEFAULTS);
+  Object.assign(settings, { ...DEFAULTS, autosaveFile: settings.autosaveFile });
 }
 
 export const THEMES: [Theme, string][] = [["auto", "Automatisch"], ["light", "Hell"], ["sepia", "Sepia"], ["dark", "Dunkel"], ["studio", "Studio"]];

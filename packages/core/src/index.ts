@@ -35,3 +35,4 @@ export {
 export {
   buildLookup, endOf, needsReview, reviewQueue, slotOf, startOf, type BlockRef, type BookLookup,
 } from "./edit/lookup.js";
+export { rebaseEdits, remapEdit, type JournalEntry, type RebaseResult } from "./edit/rebase.js";

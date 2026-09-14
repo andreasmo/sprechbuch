@@ -1,12 +1,103 @@
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { readFile, writeFile } from "@tauri-apps/plugin-fs";
-import { ACCEPT, type FileKind, type Platform } from "./types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import {
+  ACCEPT, baseName, FileConflictError, FileMissingError, type DesktopFiles, type FileKind, type FileStamp, type Platform,
+} from "./types";
 
-const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+/** Fehler aus den Rust-Befehlen (`src-tauri/src/files.rs`) in Klassen übersetzen */
+function fileError(err: unknown): Error {
+  if (err && typeof err === "object" && "kind" in err) {
+    const e = err as { kind: string; message?: string; current?: FileStamp };
+    if (e.kind === "conflict" && e.current) return new FileConflictError(e.current);
+    if (e.kind === "notFound") return new FileMissingError(e.message);
+    return new Error(e.message ?? e.kind);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+const files: DesktopFiles = {
+  async read(path) {
+    let buf: ArrayBuffer;
+    try {
+      buf = await invoke<ArrayBuffer>("book_file_read", { path });
+    } catch (err) {
+      throw fileError(err);
+    }
+    // Antwort: 4 Byte Länge + Stempel (JSON) + Inhalt
+    const len = new DataView(buf).getUint32(0, true);
+    const stamp = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, len))) as FileStamp;
+    return { name: baseName(path), path, bytes: new Uint8Array(buf, 4 + len), stamp };
+  },
+
+  async stamp(path, hash) {
+    try {
+      return await invoke<FileStamp | null>("book_file_stamp", { path, hash });
+    } catch (err) {
+      throw fileError(err);
+    }
+  },
+
+  async saveBook(bytes, opts) {
+    let target = opts.path;
+    let force = opts.force ?? false;
+    if (!target) {
+      const chosen = await save({ defaultPath: opts.suggestedPath, filters: [{ name: ACCEPT.hbook.label, extensions: ["hbook"] }] });
+      if (!chosen) return null;
+      // Überschreiben hat der Dialog bereits bestätigt
+      target = /\.hbook$/i.test(chosen) ? chosen : `${chosen}.hbook`;
+      force = true;
+    }
+    try {
+      const stamp = await invoke<FileStamp>("book_file_write", bytes, {
+        headers: { "x-path": encodeURIComponent(target), "x-expected": opts.expected ?? "", "x-force": force ? "1" : "0" },
+      });
+      return { path: target, stamp };
+    } catch (err) {
+      throw fileError(err);
+    }
+  },
+
+  async onOpenFiles(handler) {
+    const take = async () => {
+      const paths = await invoke<string[]>("take_opened_files");
+      if (paths.length) handler(paths);
+    };
+    const unlisten = await listen("open-files", () => void take());
+    await take();
+    return unlisten;
+  },
+
+  onDragDrop({ over, drop }) {
+    return getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (payload.type === "enter" || payload.type === "over") over(true);
+      else if (payload.type === "leave") over(false);
+      else {
+        over(false);
+        if (payload.paths.length) drop(payload.paths);
+      }
+    });
+  },
+
+  onCloseRequested(handler) {
+    return getCurrentWindow().onCloseRequested(async (event) => {
+      if (!(await handler())) event.preventDefault();
+    });
+  },
+
+  async ask(text, buttons, title) {
+    const res = await message(text, { title: title ?? "Sprechbuch", kind: "warning", buttons });
+    return res === buttons.yes || res === "Yes" ? "yes" : res === buttons.no || res === "No" ? "no" : "cancel";
+  },
+};
 
 export const tauriPlatform: Platform = {
   kind: "tauri",
   canOverwrite: true,
+  files,
 
   async pickFile(kind: FileKind) {
     const path = await open({
@@ -15,7 +106,7 @@ export const tauriPlatform: Platform = {
       filters: [{ name: ACCEPT[kind].label, extensions: ACCEPT[kind].extensions }],
     });
     if (typeof path !== "string") return null;
-    return { name: baseName(path), path, bytes: await readFile(path) };
+    return files.read(path);
   },
 
   async saveFile(bytes, suggestedName, kind, path) {
@@ -24,7 +115,6 @@ export const tauriPlatform: Platform = {
       filters: [{ name: ACCEPT[kind].label, extensions: ACCEPT[kind].extensions }],
     }));
     if (!target) return null;
-    // TODO(Phase 3): atomar schreiben (temporäre Datei + Umbenennen) und Fremdänderungen erkennen
     await writeFile(target, bytes);
     return target;
   },

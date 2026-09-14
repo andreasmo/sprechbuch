@@ -1,17 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Hauptfenster: Dateidialoge sowie Lesen/Schreiben der vom Nutzer im Dialog gewählten Dateien",
+  "description": "Hauptfenster: Dateidialoge, Exporte in dialoggewählte Dateien, Schließen nach Rückfrage. Buchdateien selbst liest und schreibt die App über eigene, eng begrenzte Befehle (src/files.rs).",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-destroy",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-message",
     "fs:default",
-    "fs:allow-read-file",
     "fs:allow-write-file"
   ]
 }

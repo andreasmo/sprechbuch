@@ -58,7 +58,9 @@
   }
 
   function onPipe(block: string, sentence: number) {
-    session.apply({ type: "mergeSentences", block, index: sentence });
+    // Mit Offset der Satzgrenze – bleibt eindeutig, falls anderswo Sätze geteilt wurden (Zusammenführen)
+    const at = session.lookup.blocks.get(block)?.block.sentences[sentence + 1]?.[0];
+    session.apply({ type: "mergeSentences", block, index: sentence, ...(at !== undefined ? { at } : {}) });
   }
 
   function splitHere(id: string, at: number) {

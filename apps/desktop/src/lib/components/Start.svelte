@@ -3,14 +3,17 @@
   import { readBrowserFile, type PickedFile } from "../platform";
   import { deleteBook, listRecent, type RecentEntry } from "../store/persist";
 
-  let { onPick, onDrop, onOpenRecent, ready }: {
+  let { onPick, onDrop, onOpenRecent, ready, dragOver = false }: {
     onPick: () => void;
     onDrop: (file: PickedFile) => void;
     onOpenRecent: (id: string) => void;
     ready: boolean;
+    /** Desktop: Datei wird gerade über das Fenster gezogen */
+    dragOver?: boolean;
   } = $props();
 
-  let over = $state(false);
+  let htmlOver = $state(false);
+  const over = $derived(htmlOver || dragOver);
   let recent = $state<RecentEntry[]>([]);
 
   onMount(async () => {
@@ -23,7 +26,7 @@
 
   async function drop(ev: DragEvent) {
     ev.preventDefault();
-    over = false;
+    htmlOver = false;
     const file = ev.dataTransfer?.files?.[0];
     if (file) onDrop(await readBrowserFile(file));
   }
@@ -51,8 +54,8 @@
     class:over
     role="region"
     aria-label="Datei hier ablegen"
-    ondragover={(e) => { e.preventDefault(); over = true; }}
-    ondragleave={() => (over = false)}
+    ondragover={(e) => { e.preventDefault(); htmlOver = true; }}
+    ondragleave={() => (htmlOver = false)}
     ondrop={drop}
   >
     <div class="big" aria-hidden="true">📖</div>

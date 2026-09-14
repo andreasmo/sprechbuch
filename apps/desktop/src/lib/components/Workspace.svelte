@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import { rangeFor } from "../dom";
   import type { SearchHit } from "../find";
   import { isTyping } from "../labels";
   import type { Platform } from "../platform";
   import { sentenceAt } from "../render";
   import type { BookSession } from "../store/session.svelte";
+  import { settings } from "../store/settings.svelte";
   import Editor from "./Editor.svelte";
+  import FileConflictPanel from "./FileConflictPanel.svelte";
   import Help from "./Help.svelte";
   import Overview from "./Overview.svelte";
   import Popover from "./Popover.svelte";
@@ -35,6 +37,29 @@
     return Math.max(0, firstWithSpeech);
   };
   let chapterIndex = $state(startChapter());
+
+  // Wurde die Datei von außen geändert (Cloud-Sync, anderes Gerät)? Beim Zurückkehren ins Fenster und regelmäßig prüfen
+  const CHECK_MS = 10_000;
+  onMount(() => {
+    if (!platform.files) return;
+    const check = () => void session.checkFile();
+    const onVisible = () => document.visibilityState === "visible" && check();
+    const timer = setInterval(() => document.visibilityState === "visible" && check(), CHECK_MS);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  });
+
+  const status = $derived.by(() => {
+    if (session.conflict) return { text: "⚠ Datei geändert", cls: "warn" };
+    if (session.saving) return { text: "Speichere …", cls: "" };
+    if (session.dirty) return session.autosaves ? { text: "Wird gespeichert …", cls: "" } : { text: "● Ungespeichert", cls: "warn" };
+    return session.savedPath ? { text: "Gespeichert", cls: "" } : { text: "Nicht gespeichert", cls: "" };
+  });
 
   /** Textstelle im Editor zeigen und kurz aufleuchten lassen */
   async function showInText(block: string, start?: number, end?: number) {
@@ -87,7 +112,7 @@
     const k = ev.key.toLowerCase();
     if (k === "s") {
       ev.preventDefault();
-      void session.save(platform, ev.shiftKey);
+      void session.save(ev.shiftKey);
     } else if (k === "f") {
       ev.preventDefault();
       openSearch();
@@ -132,10 +157,8 @@
     <span class="sep" aria-hidden="true"></span>
     <button class="ghost icon" disabled={!session.canUndo} onclick={() => session.undo()} title={session.canUndo ? `Rückgängig: ${session.undoLabel} (Strg+Z)` : "Nichts rückgängig zu machen"} aria-label="Rückgängig">↶</button>
     <button class="ghost icon" disabled={!session.canRedo} onclick={() => session.redo()} title={session.canRedo ? `Wiederholen: ${session.redoLabel} (Strg+Y)` : "Nichts zu wiederholen"} aria-label="Wiederholen">↷</button>
-    <span class="state small" class:dirty={session.dirty} title={session.savedPath ?? ""}>
-      {session.dirty ? "● Ungespeichert" : session.savedPath ? "Gespeichert" : "Nicht gespeichert"}
-    </span>
-    <button class="primary" onclick={() => session.save(platform)} disabled={session.saving} title="Speichern (Strg+S)">
+    <span class="state small" class:dirty={status.cls === "warn"} title={session.savedPath ?? ""}>{status.text}</span>
+    <button class="primary" onclick={() => session.save()} disabled={session.saving} title="Speichern (Strg+S)">
       {session.saving ? "Speichere …" : platform.canOverwrite ? "Speichern" : "Herunterladen"}
     </button>
     <div class="menu">
@@ -144,13 +167,22 @@
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="menu-list panel" onclick={() => (menuOpen = false)}>
-          {#if platform.canOverwrite}<button class="ghost" onclick={() => session.save(platform, true)}>Speichern unter … <kbd>Strg+⇧+S</kbd></button>{/if}
-          <button class="ghost" onclick={() => session.exportJson(platform)}>Als JSON exportieren</button>
+          {#if platform.canOverwrite}<button class="ghost" onclick={() => session.save(true)}>Speichern unter … <kbd>Strg+⇧+S</kbd></button>{/if}
+          {#if platform.files}
+            <label class="ghost toggle" title="Änderungen selbsttätig in die .hbook-Datei schreiben, sobald sie gespeichert wurde">
+              <input type="checkbox" bind:checked={settings.autosaveFile} /> Automatisch speichern
+            </label>
+          {/if}
+          <button class="ghost" onclick={() => session.exportJson()}>Als JSON exportieren</button>
           <button class="ghost" onclick={onClose}>Schließen</button>
         </div>
       {/if}
     </div>
   </header>
+
+  {#if session.conflict || session.mergeReport}
+    <FileConflictPanel {session} />
+  {/if}
 
   {#if session.search.open}
     <SearchBar {session} onJump={jump} />
@@ -158,7 +190,7 @@
 
   <main class:wide={tab === "record"}>
     {#if tab === "overview"}
-      <Overview {session} {platform} onReview={() => (tab = "review")}
+      <Overview {session} onReview={() => (tab = "review")}
         onRecordAt={(r) => recordAt(r.block, r.start)} onShowInText={(r) => showInText(r.block, r.start, r.end)} />
     {:else if tab === "edit"}
       <Editor {session} bind:chapterIndex />
@@ -211,6 +243,8 @@
   .menu { position: relative; }
   .menu-list { position: absolute; right: 0; top: 2.4rem; display: grid; min-width: 14rem; padding: 0.3rem; z-index: 40; }
   .menu-list button { text-align: left; display: flex; justify-content: space-between; gap: 1rem; }
+  .toggle { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.85rem; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .toggle:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
   main { max-width: 1180px; margin: 0 auto; padding: 1.4rem 1.2rem 4rem; }
   /* Aufnehmen: breiter, damit im Seitenmodus eine Doppelseite passt */
   main.wide { max-width: 1760px; padding-top: 0.8rem; }

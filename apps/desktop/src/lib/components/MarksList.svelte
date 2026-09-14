@@ -1,12 +1,10 @@
 <script lang="ts">
   import { fmt } from "../labels";
   import { listMarks, marksToCsv, marksToText, type MarkKind, type MarkRow } from "../marks";
-  import type { Platform } from "../platform";
   import type { BookSession } from "../store/session.svelte";
 
-  let { session, platform, onRecordAt, onShowInText }: {
+  let { session, onRecordAt, onShowInText }: {
     session: BookSession;
-    platform: Platform;
     onRecordAt: (row: MarkRow) => void;
     onShowInText: (row: MarkRow) => void;
   } = $props();
@@ -37,7 +35,7 @@
     {#if rows.length}
       <div class="actions">
         <button class="ghost" onclick={copy}>Kopieren</button>
-        <button onclick={() => session.exportText(platform, marksToCsv(filtered), `${session.fileName} – Markierungen.csv`, "csv")}>Als CSV exportieren</button>
+        <button onclick={() => session.exportText(marksToCsv(filtered), `${session.fileName} – Markierungen.csv`, "csv")}>Als CSV exportieren</button>
       </div>
     {/if}
   </div>

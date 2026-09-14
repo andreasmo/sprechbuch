@@ -19,7 +19,7 @@
         "minWidth": 720,
         "minHeight": 520,
         "resizable": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {
@@ -46,6 +46,19 @@
     "shortDescription": "Bücher als Leseskript für die Hörbuch-Aufnahme",
     "category": "Productivity",
     "copyright": "MIT License",
+    "fileAssociations": [
+      {
+        "ext": ["hbook"],
+        "name": "Sprechbuch",
+        "description": "Sprechbuch-Datei",
+        "mimeType": "application/vnd.sprechbuch.book+zip",
+        "role": "Editor",
+        "exportedType": {
+          "identifier": "org.sprechbuch.hbook",
+          "conformsTo": ["public.data", "public.zip-archive"]
+        }
+      }
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",

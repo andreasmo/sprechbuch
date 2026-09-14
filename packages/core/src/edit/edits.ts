@@ -34,7 +34,11 @@ export type Edit =
   | { type: "removeAnnotation"; id: string }
   | { type: "addMark"; mark: MarkInput }
   | { type: "setNote"; id: string; text: string }
-  | { type: "mergeSentences"; block: string; index: number }
+  | {
+    type: "mergeSentences"; block: string; index: number;
+    /** Beginn des zweiten Satzes – macht den Befehl unabhängig von zwischenzeitlich verschobenen Satznummern */
+    at?: number;
+  }
   | { type: "splitSentence"; block: string; at: number }
   | { type: "addCast"; name: string }
   | { type: "updateCast"; id: string; name?: string; voiceNote?: string; gender?: CastEntry["gender"]; badge?: string; aliases?: string[] }
@@ -292,11 +296,12 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
     }
     case "mergeSentences": {
       const { block } = findBlock(book, edit.block);
-      const cur = block.sentences[edit.index];
-      const next = block.sentences[edit.index + 1];
-      if (!cur || !next) throw new EditError("Hier gibt es keine Satzgrenze zum Entfernen.");
+      const index = edit.at === undefined ? edit.index : block.sentences.findIndex((s, i) => i > 0 && s[0] === edit.at) - 1;
+      const cur = block.sentences[index];
+      const next = block.sentences[index + 1];
+      if (index < 0 || !cur || !next) throw new EditError("Hier gibt es keine Satzgrenze zum Entfernen.");
       cur[1] = next[1];
-      block.sentences.splice(edit.index + 1, 1);
+      block.sentences.splice(index + 1, 1);
       clampProgress(book, edit.block, block.sentences.length);
       return;
     }

@@ -5,7 +5,8 @@
  * Das ist die Absturzsicherung und zugleich die Liste »Zuletzt bearbeitet«.
  * Die .hbook-Datei auf der Platte bleibt das eigentliche Dokument.
  */
-import type { Book } from "@sprechbuch/core";
+import type { Book, JournalEntry } from "@sprechbuch/core";
+import type { FileStamp } from "../platform";
 
 const DB = "sprechbuch";
 const VERSION = 1;
@@ -18,6 +19,12 @@ export interface Snapshot {
   /** Änderungen seit dem letzten Speichern als .hbook */
   dirty: boolean;
   updatedAt: string;
+  /** Stempel der .hbook-Fassung, auf der dieser Stand beruht */
+  fileStamp?: FileStamp | null;
+  /** Eigene Befehle seit dieser Fassung – zum Zusammenführen, wenn die Datei anderswo geändert wurde */
+  journal?: JournalEntry[] | null;
+  /** Pfad der importierten EPUB/PDF (Desktop) – Vorschlag für den Speicherort */
+  sourcePath?: string | null;
 }
 
 export interface RecentEntry {

@@ -7,9 +7,10 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 2 (Editor & Aufnahme).** Import, Analyse, Buchformat, Bearbeiten, Prüfen und
-> Aufnahmemodus samt allen Funktionen des früheren Studio-Readers sind fertig und getestet. Als Nächstes: Desktop-Komfort (atomares Speichern,
-> Dateiverknüpfung, Installer) und KI-Unterstützung – siehe [docs/PLAN.md](docs/PLAN.md).
+> **Status: Phase 3 (Desktop).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus
+> und sicheres Speichern mit Cloud-Sync-Abgleich sind fertig und getestet. Installer und Updates
+> werden zusammen mit macOS neu gedacht; danach folgt die KI-Unterstützung – siehe
+> [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
 
@@ -42,6 +43,16 @@ Legasthenie), Größe, Zeilen- und Wortabstand, Spaltenbreite, Pipes, Satznummer
 Kommata, Markierung langer Sätze. Jede Änderung wird sofort im App-Speicher gesichert – nach
 einem Absturz oder Neustart steht das Buch unter „Zuletzt bearbeitet“ bereit. Von Hand
 getroffene Entscheidungen überschreibt keine automatische Analyse.
+
+**Speichern und mehrere Geräte (Desktop)**
+
+- Gespeichert wird **atomar** – ein Absturz hinterlässt nie eine halbe Datei. Hat ein Buch einen
+  Speicherort, schreibt die App Änderungen **automatisch** hinein (abschaltbar).
+- Liegt die `.hbook` in einem **Cloud-Ordner** und wurde auf einem anderen Gerät weiterbearbeitet,
+  merkt die App das. Ist hier nichts offen, lädt sie die neue Fassung; sind beide Seiten geändert,
+  kann sie die eigenen Änderungen **zusammenführen** – auch nach einem Absturz.
+- `.hbook`-Dateien öffnen per Doppelklick, „Öffnen mit“ oder Hineinziehen; eine bereits laufende
+  App übernimmt die Datei.
 
 Alles läuft lokal. Es wird nichts hochgeladen.
 
