@@ -1,16 +1,7 @@
-import { applyEdit, importBook, type Book } from "@sprechbuch/core";
-import JSZip from "jszip";
+import { applyEdit, type Book } from "@sprechbuch/core";
 import { describe, expect, it } from "vitest";
-import { chapterSentences, renderBlock, snapSelection, stripFinalPeriod, type Segment } from "./render";
-
-async function bookFrom(body: string): Promise<Book> {
-  const zip = new JSZip();
-  zip.file("mimetype", "application/epub+zip");
-  zip.file("META-INF/container.xml", `<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="c.opf"/></rootfiles></container>`);
-  zip.file("c.opf", `<package xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title></metadata><manifest><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>`);
-  zip.file("a.xhtml", `<html><body>${body}</body></html>`);
-  return (await importBook(await zip.generateAsync({ type: "uint8array" }), "t.epub")).book;
-}
+import { breathChunks, chapterSentences, renderBlock, sentenceAt, sentenceNumbers, snapSelection, stripFinalPeriod, type Segment } from "./render";
+import { bookFrom } from "./test-book";
 
 function render(book: Book, blockIndex = 0) {
   const ch = book.chapters[0]!;
@@ -73,6 +64,27 @@ describe("renderBlock", () => {
     const book = await bookFrom("<h1>Kapitel 1</h1><p>Text.</p>");
     expect(render(book).map((s) => [s.sentence, s.start, s.end])).toEqual([[null, 0, 9]]);
     expect(chapterSentences(book.chapters[0]!)).toEqual([{ block: book.chapters[0]!.blocks[1]!.id, sentence: 0, start: 0, end: 5, words: 1 }]);
+  });
+});
+
+describe("Atemstellen und Satznummern", () => {
+  it("zerlegt an Komma, Semikolon, Doppelpunkt und frei stehendem Gedankenstrich", () => {
+    const text = "Ja, sagte er; dann – nach einer Weile: Halb-Mond.";
+    const chunks = breathChunks(text, 100)!;
+    expect(chunks.filter((c) => c.breath).map((c) => c.text)).toEqual([",", ";", "–", ":"]);
+    expect(chunks.map((c) => c.text).join("")).toBe(text);
+    for (const c of chunks) expect(text.slice(c.start - 100, c.end - 100)).toBe(c.text);
+    expect(breathChunks("Halb-Mond ohne Pause", 0)).toBeNull();
+  });
+
+  it("zählt Sätze kapitelweit und findet den Satz zu einem Offset", async () => {
+    const book = await bookFrom("<p>Eins. Zwei.</p><p>Drei. Vier. Fünf.</p>");
+    const ch = book.chapters[0]!;
+    const nums = sentenceNumbers(ch);
+    expect(ch.blocks.map((b) => nums.get(b.id))).toEqual([1, 3]);
+    const b = ch.blocks[1]!;
+    expect([sentenceAt(b, 0), sentenceAt(b, 6), sentenceAt(b, 5), sentenceAt(b, 99)]).toEqual([0, 1, 1, 2]);
+    expect(render(book, 1).map((s) => s.words)).toEqual([1, 0, 1, 0, 1]);
   });
 });
 

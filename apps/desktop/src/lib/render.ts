@@ -49,8 +49,15 @@ export interface Segment {
   sentence: number | null;
   start: number;
   end: number;
+  /** Wörter im Satz (0 für Leerraum) */
+  words: number;
   pieces: Piece[];
 }
+
+/** Ab dieser Wortzahl wird ein Satz als lang markiert (Atemplanung). */
+export const LONG_SENTENCE = 28;
+
+const countWords = (t: string) => (t.match(/\p{L}+/gu) ?? []).length;
 
 const TRAIL_CLOSERS = "«»“”‘’‹›\"')]}";
 
@@ -169,8 +176,65 @@ export function renderBlock(
         }
       }
     }
-    return { ...seg, pieces };
+    return { ...seg, words: seg.sentence === null ? 0 : countWords(text.slice(seg.start, seg.end)), pieces };
   });
+}
+
+/** Stellen, an denen man Luft holen kann: Komma, Semikolon, Doppelpunkt, frei stehender Gedankenstrich. */
+const BREATH_AT = /[,;:]|(?<=\s)[–—](?=\s)/gu;
+
+export interface TextChunk {
+  start: number;
+  end: number;
+  text: string;
+  breath: boolean;
+}
+
+/**
+ * Text eines Stücks an Atemstellen zerlegen. Jeder Teil behält seine Offsets,
+ * damit Klick und Auswahl weiter exakt zurückgerechnet werden. null = nichts zu zerlegen.
+ */
+export function breathChunks(text: string, start: number): TextChunk[] | null {
+  const out: TextChunk[] = [];
+  let pos = 0;
+  for (const m of text.matchAll(BREATH_AT)) {
+    const i = m.index;
+    if (i > pos) out.push({ start: start + pos, end: start + i, text: text.slice(pos, i), breath: false });
+    out.push({ start: start + i, end: start + i + m[0].length, text: m[0], breath: true });
+    pos = i + m[0].length;
+  }
+  if (!out.length) return null;
+  if (pos < text.length) out.push({ start: start + pos, end: start + text.length, text: text.slice(pos), breath: false });
+  return out;
+}
+
+/** Laufende Satznummer (ab 1) des ersten Satzes jedes Absatzes im Kapitel. */
+export function sentenceNumbers(chapter: Book["chapters"][number]): Map<string, number> {
+  const out = new Map<string, number>();
+  let n = 1;
+  for (const b of chapter.blocks) {
+    out.set(b.id, n);
+    n += b.sentences.length;
+  }
+  return out;
+}
+
+/** Satz, der den Offset enthält – liegt er zwischen zwei Sätzen, der folgende. */
+export function sentenceAt(block: BookBlock, offset: number): number {
+  const i = block.sentences.findIndex(([, z]) => offset < z);
+  return i === -1 ? Math.max(0, block.sentences.length - 1) : i;
+}
+
+/** Figuren mit Rede in einem Kapitel, häufigste zuerst – Reihenfolge der Tasten 1–9. */
+export function chapterCast(chapter: Book["chapters"][number], byBlock: Map<string, Annotation[]>): { id: string | null; n: number }[] {
+  const counts = new Map<string | null, number>();
+  for (const b of chapter.blocks) {
+    for (const a of byBlock.get(b.id) ?? []) {
+      if (a.type === "speech") counts.set(a.speaker, (counts.get(a.speaker) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([id, n]) => ({ id, n }))
+    .sort((a, b) => Number(a.id === null) - Number(b.id === null) || b.n - a.n);
 }
 
 /** Satzliste eines Kapitels in Lesereihenfolge – für Navigation im Aufnahmemodus. */
@@ -186,7 +250,7 @@ export function chapterSentences(chapter: Book["chapters"][number]): SentenceRef
   const out: SentenceRef[] = [];
   for (const b of chapter.blocks) {
     b.sentences.forEach(([s, e], i) => {
-      out.push({ block: b.id, sentence: i, start: s, end: e, words: (b.text.slice(s, e).match(/\p{L}+/gu) ?? []).length });
+      out.push({ block: b.id, sentence: i, start: s, end: e, words: countWords(b.text.slice(s, e)) });
     });
   }
   return out;

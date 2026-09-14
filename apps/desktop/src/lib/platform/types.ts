@@ -10,7 +10,7 @@ export interface PickedFile {
   path?: string;
 }
 
-export type FileKind = "source" | "hbook" | "json" | "any";
+export type FileKind = "source" | "hbook" | "json" | "csv" | "any";
 
 export interface Platform {
   readonly kind: "tauri" | "web";
@@ -29,5 +29,6 @@ export const ACCEPT: Record<FileKind, { label: string; extensions: string[]; mim
   source: { label: "Bücher (EPUB, PDF)", extensions: ["epub", "pdf"], mime: "application/octet-stream" },
   hbook: { label: "Sprechbuch", extensions: ["hbook"], mime: "application/vnd.sprechbuch.book+zip" },
   json: { label: "Sprechbuch als JSON", extensions: ["json"], mime: "application/json" },
+  csv: { label: "Tabelle (CSV)", extensions: ["csv"], mime: "text/csv" },
   any: { label: "Bücher und Sprechbuch-Dateien", extensions: ["epub", "pdf", "hbook", "json"], mime: "application/octet-stream" },
 };

@@ -9,6 +9,8 @@ import {
 import type { Platform } from "../platform";
 import { packHbook } from "../worker/protocol";
 import { saveSnapshot, saveSource } from "./persist";
+import { SearchState } from "./search.svelte";
+import { SessionTimer } from "./timer.svelte";
 
 interface HistoryEntry {
   label: string;
@@ -45,6 +47,13 @@ export class BookSession {
   redoStack: HistoryEntry[] = $state.raw([]);
   saving = $state(false);
   toast: Toast | null = $state(null);
+
+  /** Nur die Rede dieser Figur hervorheben (Legende, Tasten 1–9) */
+  isolate: string | null = $state(null);
+  /** Rede dieser Figuren abblenden */
+  muted: string[] = $state([]);
+  readonly timer = new SessionTimer();
+  readonly search = new SearchState(() => this.book);
 
   lookup = $derived(buildLookup(this.book));
   stats = $derived(bookStats(this.book));
@@ -169,6 +178,15 @@ export class BookSession {
     }
   }
 
+  async exportText(platform: Platform, text: string, suggestedName: string, kind: "csv" | "json"): Promise<void> {
+    try {
+      const path = await platform.saveFile(new TextEncoder().encode(text), suggestedName, kind);
+      if (path) this.notify(`Exportiert: ${path}`);
+    } catch (err) {
+      this.notify(`Export fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+  }
+
   // ------------------------------------------------------------------------ //
   // Automatische Sicherung
   // ------------------------------------------------------------------------ //
@@ -196,8 +214,22 @@ export class BookSession {
     this.#toastTimer = setTimeout(() => (this.toast = null), kind === "error" ? 6000 : 2500);
   }
 
+  toggleIsolate(id: string | null): void {
+    this.isolate = id === null || this.isolate === id ? null : id;
+  }
+
+  toggleMute(id: string): void {
+    this.muted = this.muted.includes(id) ? this.muted.filter((m) => m !== id) : [...this.muted, id];
+  }
+
+  clearIsolation(): void {
+    this.isolate = null;
+    this.muted = [];
+  }
+
   dispose(): void {
     this.persistNow();
+    this.timer.dispose();
     if (this.#toastTimer) clearTimeout(this.#toastTimer);
   }
 }

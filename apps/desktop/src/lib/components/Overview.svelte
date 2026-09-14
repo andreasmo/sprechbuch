@@ -2,10 +2,19 @@
   import { MARKER_SLOTS } from "@sprechbuch/core";
   import { duration, fmt } from "../labels";
   import { markVar, strongVar } from "../markers";
+  import type { MarkRow } from "../marks";
+  import type { Platform } from "../platform";
   import type { BookSession } from "../store/session.svelte";
+  import MarksList from "./MarksList.svelte";
   import Popover from "./Popover.svelte";
 
-  let { session, onReview }: { session: BookSession; onReview: () => void } = $props();
+  let { session, platform, onReview, onRecordAt, onShowInText }: {
+    session: BookSession;
+    platform: Platform;
+    onReview: () => void;
+    onRecordAt: (row: MarkRow) => void;
+    onShowInText: (row: MarkRow) => void;
+  } = $props();
 
   const book = $derived(session.book);
   const stats = $derived(session.stats);
@@ -148,6 +157,8 @@
       {/if}
     </section>
   {/if}
+
+  <MarksList {session} {platform} {onRecordAt} {onShowInText} />
 </article>
 
 {#if colorPop}

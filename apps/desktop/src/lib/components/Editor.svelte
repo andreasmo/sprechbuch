@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { endOf, slotOf, startOf, type Annotation } from "@sprechbuch/core";
+  import { endOf, startOf, type Annotation } from "@sprechbuch/core";
   import { MARK_LABEL, viaLabel } from "../labels";
-  import { markVar, strongVar } from "../markers";
   import { snapSelection } from "../render";
   import type { BookSession } from "../store/session.svelte";
   import CastPicker from "./CastPicker.svelte";
   import ChapterNav from "./ChapterNav.svelte";
+  import Legend from "./Legend.svelte";
   import Popover from "./Popover.svelte";
   import TextView, { type TextHit, type TextSelection } from "./TextView.svelte";
 
@@ -20,18 +20,6 @@
   let noteText = $state("");
 
   const chapter = $derived(session.book.chapters[Math.min(chapterIndex, session.book.chapters.length - 1)]!);
-
-  /** Figuren dieses Kapitels für die Legende */
-  const legend = $derived.by(() => {
-    const counts = new Map<string, number>();
-    for (const b of chapter.blocks) {
-      for (const a of session.lookup.byBlock.get(b.id) ?? []) {
-        if (a.type === "speech" && a.speaker) counts.set(a.speaker, (counts.get(a.speaker) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
-      .map(([id, n]) => ({ id, n, name: session.lookup.cast.get(id)?.name ?? id, slot: slotOf(session.book, chapter.id, id, session.lookup.cast) }));
-  });
 
   const covering = (hit: TextHit): Annotation[] =>
     (session.lookup.byBlock.get(hit.block) ?? []).filter((a) =>
@@ -84,11 +72,7 @@
 <div class="editor">
   <div class="toolbar">
     <ChapterNav book={session.book} index={chapterIndex} onChange={(i) => { chapterIndex = i; close(); }} />
-    <div class="legend" aria-label="Figuren in diesem Kapitel">
-      {#each legend.slice(0, 10) as f (f.id)}
-        <span class="chip"><span class="swatch" style="--mark: {markVar(f.slot)}; --strong: {strongVar(f.slot)}"></span>{f.name} <span class="muted tabular">{f.n}</span></span>
-      {/each}
-    </div>
+    <Legend {session} {chapter} limit={10} />
   </div>
   <p class="hint muted small">
     <strong>Rede anklicken</strong>: Sprecher ändern · <strong>Text markieren</strong>: Rede, Betonung, Notiz, Retake ·
@@ -185,12 +169,6 @@
 <style>
   .editor { display: grid; gap: 0.7rem; }
   .toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-  .legend { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 0.35rem;
-    border: 1px solid var(--line); border-radius: 99px; padding: 0.1rem 0.55rem 0.1rem 0.35rem;
-    font-size: 0.82rem; background: var(--panel);
-  }
   .hint { margin: 0; }
   .page { padding: 1.4rem 1.6rem 3rem; }
   h4 { margin: 0.2rem 0 0.35rem; font-size: 0.92rem; }

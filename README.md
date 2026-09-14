@@ -8,7 +8,7 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
 > **Status: Phase 2 (Editor & Aufnahme).** Import, Analyse, Buchformat, Bearbeiten, Prüfen und
-> Aufnahmemodus sind fertig und getestet. Als Nächstes: Desktop-Komfort (atomares Speichern,
+> Aufnahmemodus samt allen Funktionen des früheren Studio-Readers sind fertig und getestet. Als Nächstes: Desktop-Komfort (atomares Speichern,
 > Dateiverknüpfung, Installer) und KI-Unterstützung – siehe [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
@@ -30,13 +30,16 @@ weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser
 
 | Ansicht | Was man dort tut |
 |---|---|
-| **Übersicht** | Umfang, Sprechdauer, Qualität der Zuordnung; Figuren umbenennen, zusammenführen, Farbe und Kürzel festlegen, Stimmnotiz; Aussprache klären |
+| **Übersicht** | Umfang, Sprechdauer, Qualität der Zuordnung; Figuren umbenennen, zusammenführen, Farbe und Kürzel festlegen, Stimmnotiz; Aussprache klären; Liste aller Retakes, Lesezeichen und Notizen zum Anspringen, Kopieren oder als CSV für den Schnitt |
 | **Bearbeiten** | Rede anklicken → Sprecher ändern, bestätigen, teilen, entfernen · Text markieren → als Rede setzen, Betonung, Retake, Lesezeichen, Notiz · <kbd>Alt</kbd>+Klick → Satz teilen, Pause, Atemzeichen · Pipe `\|` anklicken → Sätze verbinden |
 | **Prüfen** | Alle unsicheren Zuordnungen nacheinander mit Kontext: <kbd>Enter</kbd> stimmt, <kbd>1</kbd>–<kbd>9</kbd> andere Figur, <kbd>N</kbd> keine Rede, <kbd>→</kbd> überspringen |
-| **Aufnehmen** | Satz für Satz lesen (<kbd>Leertaste</kbd>/<kbd>←</kbd>), Prompter mit Tempo, Vorschau auf den nächsten Satz, Fortschritt und Restzeit, Retake <kbd>r</kbd>, Lesezeichen <kbd>b</kbd>, Notiz <kbd>n</kbd>, Fokus <kbd>f</kbd>, Themen inklusive blendarmem Studio-Modus <kbd>t</kbd> |
+| **Aufnehmen** | Satz für Satz lesen (<kbd>Leertaste</kbd>/<kbd>←</kbd>), scrollen oder **blättern** (<kbd>m</kbd>, auf breiten Bildschirmen als Doppelseite), Prompter mit Tempo, Vorschau auf den nächsten Satz, Fortschritt und Restzeit · **Figurenlegende**: <kbd>1</kbd>–<kbd>9</kbd> isoliert eine Figur, <kbd>.</kbd>/<kbd>,</kbd> springt zu ihrer nächsten/vorigen Rede · Retake <kbd>r</kbd>, Lesezeichen <kbd>b</kbd>, Notiz <kbd>n</kbd> · **Aufnahme-Timer** <kbd>z</kbd> misst das echte Sprechtempo und übernimmt es für die Restzeit · Fokus <kbd>f</kbd>, Themen inklusive blendarmem Studio-Modus <kbd>t</kbd> |
 
-Überall: <kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Y</kbd> Rückgängig/Wiederholen,
-<kbd>Strg</kbd>+<kbd>S</kbd> Speichern. Jede Änderung wird sofort im App-Speicher gesichert – nach
+Überall: <kbd>Strg</kbd>+<kbd>F</kbd> Volltextsuche im ganzen Buch, <kbd>Strg</kbd>+<kbd>Z</kbd> /
+<kbd>Strg</kbd>+<kbd>Y</kbd> Rückgängig/Wiederholen, <kbd>Strg</kbd>+<kbd>S</kbd> Speichern, <kbd>?</kbd> alle
+Tastenkürzel. Unter **Aa** lässt sich die Darstellung einstellen: Schrift (auch gut lesbar für
+Legasthenie), Größe, Zeilen- und Wortabstand, Spaltenbreite, Pipes, Satznummern, Atemstellen an
+Kommata, Markierung langer Sätze. Jede Änderung wird sofort im App-Speicher gesichert – nach
 einem Absturz oder Neustart steht das Buch unter „Zuletzt bearbeitet“ bereit. Von Hand
 getroffene Entscheidungen überschreibt keine automatische Analyse.
 

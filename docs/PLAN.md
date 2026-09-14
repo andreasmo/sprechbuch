@@ -1,6 +1,6 @@
 # Plan
 
-Stand: 13.09.2026
+Stand: 14.09.2026
 
 ## Entscheidungen
 
@@ -20,7 +20,7 @@ Stand: 13.09.2026
 | Phase | Inhalt | Stand |
 |---|---|---|
 | **1 – Kern** | TypeScript-Port der Analyse mit Paritätstests; EPUB- und PDF-Import; `.hbook`-Format mit Schema, Querverweisprüfung und Migrationen; CLI; App-Gerüst (Tauri + Svelte) mit Import im Web Worker, Übersicht und Kapitelvorschau | **erledigt** |
-| **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus aus dem früheren Studio-Reader (Prompter, Satzvorschau, Fortschritt); Autosave (IndexedDB); JSON-Import/-Export in der App | **erledigt** |
+| **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus mit allen Funktionen des früheren Studio-Readers (Prompter, Satzvorschau, Fortschritt, Seitenmodus, Suche, Figur isolieren, Satznummern, Atemstellen, Timer); Markierungsliste mit CSV-Export; Autosave (IndexedDB); JSON-Import/-Export in der App | **erledigt** |
 | **3 – Desktop** | atomares Speichern neben der Quelle, Erkennung fremder Änderungen (Cloud-Sync), `.hbook`-Dateiverknüpfung, Installer (NSIS/DMG/AppImage), Auto-Update über GitHub Releases | offen |
 | **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | offen |
 | **5 – Verteilung** | Release-Seite, Web-Version hosten, Tablet-Nutzung in der Kabine (Web-App/PWA mit `.hbook`) | offen |
@@ -52,10 +52,26 @@ Stand: 13.09.2026
   das DevTools-Protokoll): Prüfen per Tastatur, Rückgängig, Aufnahmemodus, Speichern und
   Wiederöffnen mit allen Markierungen, Wiederherstellung nach Beenden der App.
 
-### Aus dem früheren Studio-Reader noch nicht übernommen
+### Studio-Reader vollständig übernommen
 
-Seitenmodus (Blättern), Volltextsuche, Figur isolieren, Satznummern, Atemzeichen an Kommata,
-Sitzungs-Timer mit gemessenem Sprechtempo.
+- **Seitenmodus** (<kbd>m</kbd>): Blättern statt Scrollen, auf breiten Bildschirmen als Doppelseite.
+  Beim Blättern springt die Leseposition auf den ersten Satz der neuen Seite, beim Weiterlesen
+  blättert die Seite von selbst.
+- **Volltextsuche** (<kbd>Strg</kbd>+<kbd>F</kbd>) im ganzen Buch, tolerant gegenüber
+  typografischen Anführungszeichen; Treffer werden über die CSS Custom Highlight API markiert,
+  ohne den Text neu zu rendern. Im Aufnahmemodus setzt ein Treffer die Leseposition.
+- **Figur isolieren** über die Legende oder <kbd>1</kbd>–<kbd>9</kbd>, abblenden mit
+  <kbd>⇧</kbd>+Klick; <kbd>.</kbd>/<kbd>,</kbd> springt zur nächsten/vorigen Redepassage der Figur,
+  auch über Kapitelgrenzen – zum Einsprechen einer Stimme am Stück.
+- **Satznummern, Atemstellen an Kommata, lange Sätze** (> 28 Wörter) als Darstellungsoptionen;
+  dazu Schriftwahl, Wortabstand und Spaltenbreite.
+- **Aufnahme-Timer** (<kbd>z</kbd>) mit gemessenem Sprechtempo, übernehmbar für Restzeit und Prompter.
+- **Markierungsliste** in der Übersicht: alle Retakes, Lesezeichen und Notizen mit Kapitel und
+  Satznummer, anspringbar im Aufnahme- oder Bearbeitungsmodus, kopierbar und als CSV exportierbar
+  (die frühere „Export“-Funktion – jetzt direkt aus der Buchdatei).
+- **Tastenübersicht** (<kbd>?</kbd>).
+- Geprüft mit Unit-Tests (Suche, Sprung zur nächsten Rede, Atemstellen, Satznummern,
+  Markierungsliste, CSV) sowie im Browser und in der echten Desktop-App mit echten Tastatureingaben.
 
 ## Bekannte Grenzen
 
@@ -69,4 +85,8 @@ Sitzungs-Timer mit gemessenem Sprechtempo.
   eigenen Entscheidungen) gibt es noch nicht.
 - Die nativen Datei-Dialoge der Desktop-App sind nur über die Rechteprüfung, nicht per Klick
   automatisiert getestet.
+- Der Prompter läuft nur im Scrollmodus. Isolierte Figur, Suche und Timer gelten für die
+  laufende Sitzung und werden nicht gespeichert.
+- Suchtreffer im Text hervorheben braucht die CSS Custom Highlight API (WebView2 und aktuelle
+  Browser; ältere WebKitGTK-Versionen unter Linux springen nur zum Treffer, ohne Markierung).
 - Der Claude-Skill aus dem Prototyp ist noch nicht auf die neue CLI umgestellt.

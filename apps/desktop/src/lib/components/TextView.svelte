@@ -16,9 +16,10 @@
 
 <script lang="ts">
   import type { BookChapter } from "@sprechbuch/core";
+  import { rangeFor, setHighlight } from "../dom";
   import { markVar, strongVar } from "../markers";
-  import { renderBlock, type Piece } from "../render";
-  import { settings } from "../store/settings.svelte";
+  import { breathChunks, LONG_SENTENCE, renderBlock, sentenceNumbers, type Piece, type SpeechInfo, type TextPiece } from "../render";
+  import { FONT_STACK, settings } from "../store/settings.svelte";
   import type { BookSession, Position } from "../store/session.svelte";
 
   let {
@@ -55,6 +56,32 @@
 
   const blocks = $derived(blockIds ? chapter.blocks.filter((b) => blockIds.includes(b.id)) : chapter.blocks);
   const cast = $derived(session.lookup.cast);
+  const numbers = $derived(sentenceNumbers(chapter));
+
+  /** Abblenden: Prüf-Fokus auf eine Rede, sonst isolierte bzw. stumm geschaltete Figuren */
+  function dimmed(sp: SpeechInfo): boolean {
+    if (focusSpeech !== undefined) return focusSpeech !== sp.id;
+    if (mode === "review") return false;
+    if (session.isolate !== null) return sp.speaker !== session.isolate;
+    return sp.speaker !== null && session.muted.includes(sp.speaker);
+  }
+
+  // Suchtreffer dieses Kapitels hervorheben (CSS Custom Highlights, ohne neu zu rendern)
+  $effect(() => {
+    if (mode === "review") return;
+    const search = session.search;
+    const current = search.current;
+    // Abhängigkeiten, die das DOM verändern
+    void [session.book, settings.breath, settings.badges, settings.speech, chapter];
+    const inChapter = search.open ? search.result.hits.filter((h) => session.lookup.blocks.get(h.block)?.chapter.id === chapter.id) : [];
+    const ranges = (list: typeof inChapter) => list.map((h) => rangeFor(root, h.block, h.start, h.end)).filter((r) => r !== null);
+    setHighlight("sb-search", ranges(inChapter.filter((h) => h !== current)));
+    setHighlight("sb-search-current", current && inChapter.includes(current) ? ranges([current]) : []);
+    return () => {
+      setHighlight("sb-search", []);
+      setHighlight("sb-search-current", []);
+    };
+  });
 
   /** DOM-Stelle → Offset im Absatztext */
   function hitFromNode(node: Node | null, nodeOffset: number): { block: string; offset: number } | null {
@@ -131,6 +158,12 @@
   const icon = (t: "retake" | "note" | "bookmark") => (t === "retake" ? "⟲" : t === "note" ? "✎" : "★");
 </script>
 
+{#snippet txt(p: TextPiece)}{@const chunks = settings.breath ? breathChunks(p.text, p.start) : null}{#if chunks}{#each chunks as c, ci (ci)}<span
+        data-start={c.start}
+        data-end={c.end}
+        class:brk={c.breath}>{c.text}</span
+      >{/each}{:else}{p.text}{/if}{/snippet}
+
 {#snippet pieces(list: Piece[])}
   {#each list as p, i (i)}
     {#if p.kind === "point"}
@@ -151,12 +184,12 @@
       >{#if p.speech}<mark
             class="sp"
             class:weak={p.speech.weak}
-            class:dim={focusSpeech !== undefined && focusSpeech !== p.speech.id}
+            class:dim={dimmed(p.speech)}
             class:focus={focusSpeech === p.speech.id}
             style="--mark: {markVar(p.speech.slot)}; --strong: {strongVar(p.speech.slot)}"
             title={p.speech.speaker ? (cast.get(p.speech.speaker)?.name ?? p.speech.speaker) : "nicht zugeordnet"}
-            >{#if p.speech.badge}<span class="badge">{p.speech.badge}</span>{/if}{p.text}</mark
-          >{:else}{p.text}{/if}</span
+            >{#if p.speech.badge}<span class="badge">{p.speech.badge}</span>{/if}{@render txt(p)}</mark
+          >{:else}{@render txt(p)}{/if}</span
       >
     {/if}
   {/each}
@@ -170,7 +203,9 @@
   data-speech={settings.speech}
   class:no-badges={!settings.badges}
   class:focus-mode={mode === "record" && settings.focus}
-  style="--fs: {settings.fontSize}px; --lh: {settings.lineHeight}; --colw: {settings.columnWidth}rem"
+  class:numbers={settings.numbers && mode !== "review"}
+  class:warn-long={settings.warnLong}
+  style="--fs: {settings.fontSize}px; --lh: {settings.lineHeight}; --colw: {settings.columnWidth}rem; --ws: {settings.wordSpacing}em; --read-font: {FONT_STACK[settings.font]}"
   bind:this={root}
   onclick={onClick}
   onmouseup={onMouseUp}
@@ -189,8 +224,10 @@
               class="s"
               class:cur={isCur(block.id, seg.sentence)}
               class:read={mode === "record" && settings.dimRead && isRead?.(block.id, seg.sentence)}
-              data-s={seg.sentence}>{@render pieces(seg.pieces)}</span
-            >{#if settings.pipes}{#if mode === "edit" && seg.sentence < block.sentences.length - 1}<button
+              class:long={seg.words > LONG_SENTENCE}
+              data-s={seg.sentence}
+              data-n={(numbers.get(block.id) ?? 1) + seg.sentence}>{@render pieces(seg.pieces)}</span
+            >{#if settings.pipes && seg.sentence < block.sentences.length - 1}{#if mode === "edit"}<button
                   type="button"
                   class="pipe"
                   tabindex="-1"
@@ -209,9 +246,10 @@
   .textview {
     max-width: var(--colw);
     margin: 0 auto;
-    font-family: var(--read);
+    font-family: var(--read-font, var(--read));
     font-size: var(--fs);
     line-height: var(--lh);
+    word-spacing: var(--ws, 0);
     text-align: left;
     hyphens: none;
     -webkit-hyphens: none;
@@ -228,6 +266,17 @@
   .s.cur { background: var(--cur); outline: 0.12em solid var(--curline); outline-offset: 0.12em; }
   .s.read { opacity: 0.5; }
   .focus-mode .s:not(.cur) { opacity: 0.3; }
+  .numbers .s::before {
+    content: attr(data-n);
+    font: 600 0.52em/1 var(--ui);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    vertical-align: 0.9em;
+    margin-right: 0.22em;
+    user-select: none;
+  }
+  .warn-long .s.long { text-decoration: underline dotted color-mix(in srgb, var(--warn) 70%, transparent); text-decoration-thickness: 0.09em; text-underline-offset: 0.34em; }
+  .brk { box-shadow: inset 0 -0.22em 0 color-mix(in srgb, var(--accent) 60%, transparent); padding: 0 0.14em 0 0.06em; border-radius: 0.1em; }
 
   .it { font-style: italic; }
   .bd { font-weight: 700; }
@@ -249,6 +298,6 @@
   [data-speech="underline"] :global(mark.sp) { background: none; text-decoration: underline 0.12em var(--strong); text-underline-offset: 0.22em; padding: 0; margin: 0; }
   [data-speech="off"] :global(mark.sp) { background: none; padding: 0; margin: 0; }
   [data-speech="off"] :global(.badge), .no-badges :global(.badge) { display: none; }
-  :global(mark.sp.dim) { opacity: 0.45; }
+  :global(mark.sp.dim) { opacity: 0.35; }
   :global(mark.sp.focus) { box-shadow: 0 0 0 2px var(--accent); }
 </style>

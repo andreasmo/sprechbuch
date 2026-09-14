@@ -2,6 +2,7 @@
   import { slotOf } from "@sprechbuch/core";
   import { fmt, isTyping, viaLabel } from "../labels";
   import { markVar, strongVar } from "../markers";
+  import { chapterCast } from "../render";
   import type { BookSession } from "../store/session.svelte";
   import CastPicker from "./CastPicker.svelte";
   import Popover from "./Popover.svelte";
@@ -29,14 +30,8 @@
   /** Die Figuren dieses Kapitels, häufigste zuerst – die ersten neun per Zifferntaste */
   const choices = $derived.by(() => {
     if (!ref) return [];
-    const counts = new Map<string, number>();
-    for (const b of ref.chapter.blocks) {
-      for (const a of session.lookup.byBlock.get(b.id) ?? []) {
-        if (a.type === "speech" && a.speaker) counts.set(a.speaker, (counts.get(a.speaker) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 9)
-      .map(([id]) => session.lookup.cast.get(id)).filter((c) => !!c);
+    return chapterCast(ref.chapter, session.lookup.byBlock).filter((e) => e.id !== null).slice(0, 9)
+      .map((e) => session.lookup.cast.get(e.id!)).filter((c) => !!c);
   });
 
   function decide(edit: Parameters<BookSession["apply"]>[0]) {

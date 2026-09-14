@@ -3,30 +3,54 @@
  */
 export type Theme = "auto" | "light" | "sepia" | "dark" | "studio";
 export type SpeechDisplay = "marker" | "underline" | "off";
+export type ReadFont = "serif" | "sans" | "legible" | "mono";
 
 export interface Settings {
   theme: Theme;
+  font: ReadFont;
   fontSize: number;
   lineHeight: number;
   columnWidth: number;
+  /** zusätzlicher Wortabstand in em */
+  wordSpacing: number;
   speech: SpeechDisplay;
   badges: boolean;
   pipes: boolean;
+  /** Atemstellen an Kommata, Semikola, Doppelpunkten */
+  breath: boolean;
+  /** lange Sätze unterstreichen */
+  warnLong: boolean;
+  numbers: boolean;
   wpm: number;
   focus: boolean;
   dimRead: boolean;
   preview: boolean;
+  legend: boolean;
+  /** Seitenmodus (Blättern) statt Scrollen im Aufnahmemodus */
+  paged: boolean;
 }
 
 const KEY = "sprechbuch:settings";
-const DEFAULTS: Settings = {
-  theme: "auto", fontSize: 21, lineHeight: 1.8, columnWidth: 38, speech: "marker",
-  badges: true, pipes: true, wpm: 150, focus: false, dimRead: true, preview: true,
+export const DEFAULTS: Settings = {
+  theme: "auto", font: "serif", fontSize: 21, lineHeight: 1.8, columnWidth: 38, wordSpacing: 0, speech: "marker",
+  badges: true, pipes: true, breath: false, warnLong: false, numbers: false, wpm: 150, focus: false, dimRead: true,
+  preview: true, legend: true, paged: false,
+};
+
+export const FONT_STACK: Record<ReadFont, string> = {
+  serif: `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`,
+  sans: `"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif`,
+  legible: `"Atkinson Hyperlegible", "OpenDyslexic", Verdana, Tahoma, sans-serif`,
+  mono: `ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace`,
 };
 
 function load(): Settings {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    const stored = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Settings>;
+    const merged = { ...DEFAULTS, ...stored };
+    // Unbekannte Werte aus älteren Versionen nicht übernehmen
+    if (!(merged.font in FONT_STACK)) merged.font = DEFAULTS.font;
+    return merged;
   } catch {
     return { ...DEFAULTS };
   }
@@ -50,4 +74,10 @@ $effect.root(() => {
 
 export function resetSettings(): void {
   Object.assign(settings, DEFAULTS);
+}
+
+export const THEMES: [Theme, string][] = [["auto", "Automatisch"], ["light", "Hell"], ["sepia", "Sepia"], ["dark", "Dunkel"], ["studio", "Studio"]];
+
+export function nextTheme(): void {
+  settings.theme = THEMES[(THEMES.findIndex(([t]) => t === settings.theme) + 1) % THEMES.length]![0];
 }

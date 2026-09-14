@@ -140,6 +140,10 @@ mark.sp .badge {
 }
 .q2 { font-style: italic; }
 
+/* Suchtreffer (CSS Custom Highlight API – das DOM bleibt unverändert) */
+::highlight(sb-search) { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+::highlight(sb-search-current) { background-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--fg); }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
