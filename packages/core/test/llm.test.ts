@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyBookPatches, applyEdit, castMergeJob, compareSpeakers, configFromPreset, estimateJobs, extractJson, LlmClient, LlmError,
-  presetById, pronunciationJob, reviewQueue, runJobs, speakerJobs, validateBook,
+  applyBookPatches, applyEdit, castMergeJob, compareSpeakers, configFromPreset, countAsked, estimateJobs, estimateSeconds, extractJson,
+  isLocalUrl, LlmClient, LlmError, migrateConfig, presetById, pronunciationJob, reviewQueue, runJobs, speakerChunkChars, speakerJobs,
+  updateSpeed, validateBook,
   type Annotation, type Book, type Edit, type HttpRequest, type HttpResponse, type LlmJob, type ProviderConfig, type Transport,
 } from "../src/index.js";
 import { sampleBook } from "./helpers.js";
@@ -37,7 +38,18 @@ const openaiReply = (content: string) => ({
 });
 
 const anthropic = (): ProviderConfig => configFromPreset(presetById("anthropic")!);
-const local = (): ProviderConfig => ({ ...configFromPreset(presetById("ollama")!), model: "qwen3" });
+const local = (): ProviderConfig => ({ ...configFromPreset(presetById("lmstudio")!), model: "qwen3" });
+const ollama = (): ProviderConfig => ({ ...configFromPreset(presetById("ollama")!), model: "gemma4:26b" });
+const ollamaShow = (contextLength: number, capabilities = ["completion", "thinking"]) => ({
+  status: 200, body: JSON.stringify({ model_info: { "general.architecture": "gemma4", "gemma4.context_length": contextLength }, capabilities }),
+});
+const ollamaReply = (json: unknown, extra: Record<string, unknown> = {}) => ({
+  status: 200,
+  body: JSON.stringify({
+    message: { role: "assistant", content: JSON.stringify(json) }, done: true, done_reason: "stop",
+    prompt_eval_count: 800, prompt_eval_duration: 20e9, eval_count: 90, eval_duration: 10e9, load_duration: 5e9, ...extra,
+  }),
+});
 const simpleRequest = { system: "s", user: "u", schema: { type: "object" }, schemaName: "t", maxTokens: 100 };
 
 describe("LlmClient", () => {
@@ -45,7 +57,7 @@ describe("LlmClient", () => {
     const { transport, requests } = fakeTransport(anthropicReply({ ok: true }, { input_tokens: 12, output_tokens: 3 }));
     const client = new LlmClient(anthropic(), transport);
     const res = await client.complete(simpleRequest);
-    expect(res).toEqual({ json: { ok: true }, usage: { input: 12, output: 3 } });
+    expect(res).toEqual({ json: { ok: true }, usage: { input: 12, output: 3 }, timing: { totalMs: expect.any(Number) } });
     const req = requests[0]!;
     expect(req).toMatchObject({ provider: "anthropic", url: "https://api.anthropic.com/v1/messages", method: "POST", auth: "x-api-key" });
     expect(req.headers["anthropic-version"]).toBe("2023-06-01");
@@ -64,7 +76,18 @@ describe("LlmClient", () => {
     expect(res.json).toEqual({ ok: true });
     expect(client.structured).toBe("json");
     expect(requests.map((r) => JSON.parse(r.body!).response_format?.type)).toEqual(["json_schema", "json_object"]);
-    expect(requests[0]).toMatchObject({ url: "http://localhost:11434/v1/chat/completions", auth: "none" });
+    expect(requests[0]).toMatchObject({ url: "http://localhost:1234/v1/chat/completions", auth: "none" });
+  });
+
+  it("erkennt, wenn ein lokaler OpenAI-kompatibler Server den Text abschneidet", async () => {
+    const long = { ...simpleRequest, user: "Wort ".repeat(6000) };
+    const cut = fakeTransport({
+      status: 200,
+      body: JSON.stringify({ choices: [{ message: { content: "{\"ok\":true}" }, finish_reason: "stop" }], usage: { prompt_tokens: 2051, completion_tokens: 5 } }),
+    });
+    await expect(new LlmClient(local(), cut.transport).complete(long)).rejects.toMatchObject({ kind: "truncated", message: /2051 von etwa 10001/ });
+    // Cloud-Anbieter und kurze Anfragen sind davon nicht betroffen
+    await expect(new LlmClient(local(), cut.transport).complete(simpleRequest)).resolves.toMatchObject({ json: { ok: true } });
   });
 
   it("wiederholt bei Überlastung, bricht bei falschem Schlüssel sofort ab", async () => {
@@ -89,6 +112,104 @@ describe("LlmClient", () => {
   it("listet Modelle beider Formate", async () => {
     const { transport } = fakeTransport({ status: 200, body: JSON.stringify({ data: [{ id: "b" }, { id: "a" }] }) });
     expect(await new LlmClient(local(), transport).listModels()).toEqual(["a", "b"]);
+    const tags = fakeTransport({ status: 200, body: JSON.stringify({ models: [{ name: "qwen3.8:latest", model: "qwen3.8:latest" }, { name: "gemma4:26b", model: "gemma4:26b" }] }) });
+    expect(await new LlmClient(ollama(), tags.transport).listModels()).toEqual(["gemma4:26b", "qwen3.8:latest"]);
+    expect(tags.requests[0]).toMatchObject({ url: "http://localhost:11434/api/tags", method: "GET", auth: "none" });
+  });
+});
+
+describe("Ollama", () => {
+  it("setzt Kontextfenster (begrenzt durchs Modell), Schema und schaltet Nachdenken ab; misst die Zeit", async () => {
+    const { transport, requests } = fakeTransport(ollamaShow(16_384), ollamaReply({ ok: true }));
+    const client = new LlmClient({ ...ollama(), contextTokens: 32_768 }, transport);
+    const res = await client.complete({ ...simpleRequest, maxTokens: 50_000 });
+    expect(requests.map((r) => r.url)).toEqual(["http://localhost:11434/api/show", "http://localhost:11434/api/chat"]);
+    expect(JSON.parse(requests[0]!.body!)).toEqual({ model: "gemma4:26b" });
+    const body = JSON.parse(requests[1]!.body!);
+    expect(body).toMatchObject({ model: "gemma4:26b", stream: false, think: false, format: { type: "object" }, options: { num_ctx: 16_384 } });
+    expect(body.messages.map((m: { role: string }) => m.role)).toEqual(["system", "user"]);
+    expect(body.options.num_predict).toBeLessThan(16_384);
+    expect(client.contextTokens).toBe(16_384);
+    expect(res.json).toEqual({ ok: true });
+    expect(res.usage).toEqual({ input: 800, output: 90 });
+    expect(res.timing).toMatchObject({ promptMs: 20_000, promptTokens: 800, outputMs: 10_000, outputTokens: 90 });
+  });
+
+  it("alte Einstellungen mit …/v1 laufen über die eigene Schnittstelle; Modell ohne Nachdenken bekommt kein think", async () => {
+    const old = migrateConfig({ ...ollama(), kind: "openai", baseUrl: "http://localhost:11434/v1/", contextTokens: undefined });
+    expect(old).toMatchObject({ kind: "ollama", baseUrl: "http://localhost:11434", contextTokens: 32_768 });
+    const { transport, requests } = fakeTransport(ollamaShow(262_144, ["completion"]), ollamaReply({ ok: true }));
+    await new LlmClient(old, transport).complete(simpleRequest);
+    const body = JSON.parse(requests[1]!.body!);
+    expect(body.think).toBeUndefined();
+    expect(body.options.num_ctx).toBe(32_768);
+  });
+
+  it("lehnt zu lange Abschnitte vor dem Senden ab und meldet abgeschnittene Antworten", async () => {
+    const tooLong = fakeTransport(ollamaShow(8192), ollamaReply({ ok: true }));
+    const err = await new LlmClient(ollama(), tooLong.transport).complete({ ...simpleRequest, user: "x".repeat(30_000) }).catch((e) => e);
+    expect(err).toMatchObject({ kind: "config", message: /Kontextfenster/ });
+    expect(tooLong.requests).toHaveLength(1);
+
+    const cut = fakeTransport(ollamaShow(8192), ollamaReply({ ok: true }, { done_reason: "length" }));
+    await expect(new LlmClient(ollama(), cut.transport).complete(simpleRequest)).rejects.toMatchObject({ kind: "truncated" });
+  });
+
+  it("fehlendes Modell, abgelehntes think, nicht laufender Server", async () => {
+    const missing = fakeTransport({ status: 404, body: JSON.stringify({ error: "model 'gemma9' not found" }) });
+    await expect(new LlmClient(ollama(), missing.transport).complete(simpleRequest)).rejects.toMatchObject({ kind: "config", message: /ollama pull gemma4:26b/ });
+
+    const noThink = fakeTransport(
+      ollamaShow(8192),
+      { status: 400, body: JSON.stringify({ error: "\"gemma4:26b\" does not support thinking" }) },
+      ollamaReply({ ok: true }),
+    );
+    await new LlmClient(ollama(), noThink.transport).complete(simpleRequest);
+    expect(noThink.requests.map((r) => JSON.parse(r.body!).think)).toEqual([undefined, false, undefined]);
+
+    const down: Transport = async () => {
+      throw new Error("connection refused");
+    };
+    await expect(new LlmClient(ollama(), down).complete(simpleRequest)).rejects.toMatchObject({ kind: "network", message: /läuft Ollama\?/ });
+  });
+
+  it("Probeanfrage lokal mit Text, damit die Geschwindigkeit messbar ist", async () => {
+    const { transport, requests } = fakeTransport(ollamaShow(8192), ollamaReply({ ok: true, woerter: ["Am", "Morgen"] }));
+    const res = await new LlmClient(ollama(), transport).test();
+    expect(JSON.parse(requests[1]!.body!).messages[1].content.length).toBeGreaterThan(1000);
+    const speed = updateSpeed(null, res.timing)!;
+    expect(speed).toMatchObject({ promptTps: 40, outputTps: 9 });
+  });
+});
+
+describe("lokal oder nicht", () => {
+  it("erkennt lokale Adressen wie der Rust-Teil", () => {
+    for (const url of [
+      "http://localhost:11434", "http://127.0.0.1:1234/v1", "http://[::1]:8080", "http://192.168.1.20:11434", "http://10.0.0.5",
+      "http://172.20.1.1", "http://169.254.3.4", "http://gpu-box:11434", "http://nas.local:11434", "https://ki.home.arpa",
+      "http://server.lan", "http://[fd12:3456::1]:11434", "http://[fe80::1]",
+    ]) expect(isLocalUrl(url), url).toBe(true);
+    for (const url of [
+      "https://api.anthropic.com/v1", "http://172.32.0.1", "http://8.8.8.8", "https://example.com", "http://[2001:db8::1]", "kein url",
+      "https://localhost.example.com",
+    ]) expect(isLocalUrl(url), url).toBe(false);
+  });
+});
+
+describe("Zeitschätzung", () => {
+  it("rechnet Messungen gewichtet ein und schätzt die Dauer", async () => {
+    const first = updateSpeed(null, { totalMs: 1, promptMs: 10_000, promptTokens: 500, outputMs: 10_000, outputTokens: 100 })!;
+    expect(first).toEqual({ promptTps: 50, outputTps: 10, samples: 600 });
+    // Ein langer Abschnitt zählt mehr als die kurze Probe
+    const second = updateSpeed(first, { totalMs: 1, promptMs: 600_000, promptTokens: 18_000, outputMs: 300_000, outputTokens: 1800 })!;
+    expect(second.promptTps).toBeGreaterThan(30);
+    expect(second.promptTps).toBeLessThan(32);
+    expect(updateSpeed(second, { totalMs: 500 })).toBe(second);
+
+    const { book } = await sampleBook();
+    const jobs = speakerJobs(book);
+    const est = estimateJobs(jobs, { priceIn: 0, priceOut: 0 });
+    expect(estimateSeconds(jobs, { promptTps: 10, outputTps: 2, samples: 1 })).toBeCloseTo(est.input / 10 + est.output / 2);
   });
 });
 
@@ -158,6 +279,30 @@ describe("Sprecherzuordnung", () => {
     book = apply(book, { type: "setSpeaker", ids: ["a000001"], speaker: "jonas" });
     expect(speech(book, "a000001").suggestion).toBeUndefined();
   });
+
+  it("ein neuer Lauf setzt fort: schon Eingeschätztes wird nur mit recheck erneut gefragt", async () => {
+    let { book } = await sampleBook();
+    expect(countAsked(book)).toBe(3);
+    book = apply(book, {
+      type: "applySpeakerSuggestions", model: "test",
+      // a000002: einig → llm; a000004: unsichere Gegenmeinung → Vorschlag bleibt dran
+      items: [{ id: "a000002", speaker: "anna", confidence: 0.9 }, { id: "a000004", speaker: "paul", confidence: 0.4 }],
+    });
+    expect(countAsked(book)).toBe(1);
+    expect(speakerJobs(book)[0]!.request.user).toContain("Zu bestimmen: R1 (1 Passagen)");
+    // a000002 ist nach der Bestätigung sicher und fällt auch mit recheck heraus
+    expect(countAsked(book, { recheck: true })).toBe(2);
+  });
+
+  it("Abschnittsgröße richtet sich nach dem Kontextfenster", async () => {
+    const { book } = await sampleBook();
+    const small = speakerChunkChars(book, 8192);
+    const standard = speakerChunkChars(book, 32_768);
+    expect(small).toBeGreaterThanOrEqual(6000);
+    expect(standard).toBeGreaterThan(40_000);
+    expect(standard).toBeLessThanOrEqual(60_000);
+    expect(speakerChunkChars(book, 262_144)).toBe(60_000);
+  });
 });
 
 describe("Figuren und Aussprache", () => {
@@ -210,7 +355,7 @@ describe("runJobs", () => {
     };
     const client = new LlmClient({ ...anthropic(), concurrency: 2 }, transport);
     const seen: string[] = [];
-    const summary = await runJobs(client, [job("a"), job("b"), job("c"), job("d")], { onResult: (j) => seen.push(j.key) });
+    const summary = await runJobs(client, [job("a"), job("b"), job("c"), job("d")], { onResult: (j) => void seen.push(j.key) });
     expect(peak).toBe(2);
     expect(seen.sort()).toEqual(["a", "b", "c", "d"]);
     expect(summary).toMatchObject({ done: 4, failed: 0, skipped: 0, stopped: null, usage: { input: 4000, output: 800 } });

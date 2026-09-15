@@ -132,6 +132,8 @@ async function main(argv: string[]): Promise<number> {
       "price-in": { type: "string" },
       "price-out": { type: "string" },
       "merge-cast": { type: "boolean" },
+      "allow-cloud": { type: "boolean" },
+      context: { type: "string" },
       yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
@@ -203,12 +205,30 @@ async function main(argv: string[]): Promise<number> {
     }
     case "ai": {
       const { book, source } = await readBook(input);
-      const result = await runAi(book, values as AiArgs);
-      if (!result || result === book) return result ? 0 : 1;
       const target = values.out ? abs(values.out) : input;
-      await writeAtomic(target, await writeHbook(result, source));
-      console.log(`✓ ${target}`);
-      return 0;
+      // Strg+C: laufende Anfrage abbrechen (ein lokales Modell hört dann auf zu rechnen), Erreichtes speichern
+      const controller = new AbortController();
+      const onInt = () => {
+        process.stderr.write("\n· Abbruch – speichere, was fertig ist …\n");
+        controller.abort();
+      };
+      process.once("SIGINT", onInt);
+      // Lange lokale Läufe zwischendurch sichern – höchstens alle zwei Minuten
+      let saved = Date.now();
+      const checkpoint = async (current: typeof book) => {
+        if (Date.now() - saved < 120_000) return;
+        saved = Date.now();
+        await writeAtomic(target, await writeHbook(current, source));
+      };
+      try {
+        const result = await runAi(book, values as AiArgs, { signal: controller.signal, onProgress: checkpoint });
+        if (!result || result === book) return result ? 0 : 1;
+        await writeAtomic(target, await writeHbook(result, source));
+        console.log(`✓ ${target}`);
+        return 0;
+      } finally {
+        process.off("SIGINT", onInt);
+      }
     }
     case "eval": {
       const { book: reference, source } = await readBook(input);

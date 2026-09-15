@@ -27,15 +27,26 @@ const ai: AiBridge = {
   async deleteKey(provider) {
     await invoke("ai_key_delete", { provider });
   },
-  async transport(req) {
+  async allowCloud() {
+    return (await invoke<{ allowCloud: boolean }>("ai_policy")).allowCloud;
+  },
+  async setAllowCloud(allow) {
+    return (await invoke<{ allowCloud: boolean }>("ai_policy_set", { allowCloud: allow })).allowCloud;
+  },
+  async transport(req, signal) {
+    const id = crypto.randomUUID();
+    const cancel = () => void invoke("ai_http_cancel", { id });
+    signal?.addEventListener("abort", cancel, { once: true });
     try {
-      return await invoke<{ status: number; body: string; retryAfter?: number }>("ai_http", { request: req });
+      return await invoke<{ status: number; body: string; retryAfter?: number }>("ai_http", { request: { ...req, id } });
     } catch (err) {
       const kind = err && typeof err === "object" && "kind" in err ? (err as { kind: string }).kind : "";
       // Fehlender Schlüssel oder gesperrte Adresse sind endgültig – als Antwort melden, damit nicht wiederholt wird
       if (kind === "noKey") return { status: 401, body: JSON.stringify({ error: { message: aiMessage(err) } }) };
-      if (kind === "forbidden") return { status: 403, body: JSON.stringify({ error: { message: aiMessage(err) } }) };
+      if (kind === "forbidden" || kind === "policy") return { status: 403, body: JSON.stringify({ error: { message: aiMessage(err) } }) };
       throw new Error(aiMessage(err));
+    } finally {
+      signal?.removeEventListener("abort", cancel);
     }
   },
 };

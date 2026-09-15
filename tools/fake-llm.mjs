@@ -2,10 +2,11 @@
 /**
  * KI-Attrappe für Entwicklung und Tests – ohne Kosten, ohne Schlüssel beim echten Anbieter.
  *
- * Spricht beide Protokolle, die Sprechbuch nutzt:
+ * Spricht alle Protokolle, die Sprechbuch nutzt:
  *   POST /v1/messages           Anthropic Messages API (output_config.format)
  *   POST /v1/chat/completions   OpenAI-kompatibel (response_format)
  *   GET  /v1/models
+ *   POST /api/chat, /api/show; GET /api/tags   Ollama (format, options.num_ctx, Zeiten)
  *
  * Antworten sind deterministisch: Sprecher über Inquit-Formeln im markierten Text, sonst die erste
  * Figur mit geringer Sicherheit; Figuren-Zusammenführung für Namen, die in anderen enthalten sind;
@@ -14,7 +15,8 @@
  *   node tools/fake-llm.mjs [--port 8787] [--key geheim] [--log anfragen.jsonl] [--delay 0]
  *
  * Mit --key verlangt die Attrappe genau diesen Schlüssel (x-api-key bzw. Authorization: Bearer).
- * Das Protokoll enthält nie den Schlüssel, nur ob er stimmte.
+ * Das Protokoll enthält nie den Schlüssel, nur ob er stimmte – und ob der Aufrufer die Verbindung
+ * vor der Antwort geschlossen hat (Abbrechen).
  */
 import { appendFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -70,7 +72,7 @@ function pronunciation(user) {
 
 function answer(schema, user) {
   const props = schema?.properties ?? {};
-  if (props.ok) return { ok: true };
+  if (props.ok) return props.woerter ? { ok: true, woerter: user.split(/\s+/).slice(-20) } : { ok: true };
   if (props.merges) return merges(user);
   if (props.items?.items?.properties?.term) return pronunciation(user);
   return speakers(user);
@@ -95,11 +97,38 @@ createServer((req, res) => {
     const auth = req.headers["x-api-key"] ?? req.headers.authorization?.replace(/^Bearer\s+/i, "");
     const authOk = !KEY || auth === KEY;
     const body = raw ? JSON.parse(raw) : {};
-    if (values.log) {
-      appendFileSync(values.log, `${JSON.stringify({ at: new Date().toISOString(), method: req.method, url: req.url, authOk, model: body.model, keyHeader: req.headers["x-api-key"] ? "x-api-key" : req.headers.authorization ? "bearer" : "none" })}\n`);
-    }
-    if (DELAY) await new Promise((r) => setTimeout(r, DELAY));
+    const log = (entry) => values.log && appendFileSync(values.log, `${JSON.stringify({ at: new Date().toISOString(), method: req.method, url: req.url, ...entry })}\n`);
+    log({
+      authOk, model: body.model, keyHeader: req.headers["x-api-key"] ? "x-api-key" : req.headers.authorization ? "bearer" : "none",
+      ...(body.options ? { numCtx: body.options.num_ctx, think: body.think ?? null } : {}),
+    });
+    res.on("close", () => {
+      if (!res.writableFinished) log({ aborted: true });
+    });
+    if (DELAY && req.url !== "/api/show" && req.url !== "/api/tags") await new Promise((r) => setTimeout(r, DELAY));
+    if (res.destroyed) return;
     if (!authOk) return send(res, 401, { error: { type: "authentication_error", message: "invalid api key" } });
+
+    if (req.method === "GET" && req.url === "/api/tags") {
+      return send(res, 200, { models: [{ name: "fake-lokal:latest", model: "fake-lokal:latest" }] });
+    }
+    if (req.method === "POST" && req.url === "/api/show") {
+      if (!String(body.model).startsWith("fake")) return send(res, 404, { error: `model '${body.model}' not found` });
+      return send(res, 200, { model_info: { "general.architecture": "fake", "fake.context_length": 131072 }, capabilities: ["completion", "thinking"] });
+    }
+    if (req.method === "POST" && req.url === "/api/chat") {
+      const user = body.messages?.find((m) => m.role === "user")?.content ?? "";
+      const system = body.messages?.find((m) => m.role === "system")?.content ?? "";
+      const json = answer(typeof body.format === "object" ? body.format : {}, user);
+      const promptTokens = Math.ceil((system.length + user.length) / 3);
+      const outputTokens = Math.ceil(JSON.stringify(json).length / 3);
+      // Wie ein Rechner ohne GPU: 40 Token/s lesen, 8 Token/s schreiben (nur gemeldet, nicht gewartet)
+      return send(res, 200, {
+        model: body.model, message: { role: "assistant", content: JSON.stringify(json) }, done: true, done_reason: "stop",
+        prompt_eval_count: promptTokens, prompt_eval_duration: Math.round((promptTokens / 40) * 1e9),
+        eval_count: outputTokens, eval_duration: Math.round((outputTokens / 8) * 1e9), load_duration: 1e9,
+      });
+    }
 
     if (req.method === "GET" && req.url?.endsWith("/models")) {
       return send(res, 200, { data: [{ id: "fake-klein" }, { id: "fake-gross" }] });

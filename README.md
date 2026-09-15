@@ -7,10 +7,10 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 4 (KI).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus,
-> sicheres Speichern mit Cloud-Sync-Abgleich und optionale KI-Unterstützung sind fertig und
-> getestet. Installer und Updates werden zusammen mit macOS neu gedacht – siehe
-> [docs/PLAN.md](docs/PLAN.md).
+> **Status: Phase 5a (lokale KI).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus,
+> sicheres Speichern mit Cloud-Sync-Abgleich und optionale KI-Unterstützung – bevorzugt mit einem
+> Modell auf dem eigenen Rechner – sind fertig und getestet. Als Nächstes: iPad/Web, Installer für
+> Windows, macOS und Linux – siehe [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
 
@@ -54,19 +54,30 @@ getroffene Entscheidungen überschreibt keine automatische Analyse.
 - `.hbook`-Dateien öffnen per Doppelklick, „Öffnen mit“ oder Hineinziehen; eine bereits laufende
   App übernimmt die Datei.
 
-**KI – optional, mit eigenem Zugang**
+**KI – optional, standardmäßig nur lokal**
 
-- Anthropic (Claude), OpenAI, OpenRouter, eigene Endpunkte oder **lokale Modelle** (Ollama,
-  LM Studio), bei denen der Text den Rechner nicht verlässt.
+- **Nur lokale KI** ist voreingestellt: Unveröffentlichte Bücher sind vertraulich, deshalb geht
+  Buchtext nur an Modelle auf diesem Rechner oder im lokalen Netz – **Ollama** (empfohlen) oder
+  LM Studio. Die Sperre sitzt in der Desktop-App selbst (Rust), nicht nur in der Oberfläche.
+- Cloud-Anbieter (Anthropic, OpenAI, OpenRouter, eigene Endpunkte) lassen sich nach einer
+  ausdrücklichen Rückfrage erlauben – und brauchen dann trotzdem pro Buch eine Einwilligung.
 - Die KI prüft nur, wo die Regeln unsicher sind: **Sprecherzuordnung**, **doppelte Figuren**
   (Vorschläge zum Bestätigen), **Aussprache** (als ungeprüfter Vorschlag). Abweichungen landen mit
   Begründung in der Prüfung und lassen sich mit <kbd>V</kbd> übernehmen.
-- Vor jedem Lauf: Kostenschätzung und Obergrenze. Pro Buch muss man ausdrücklich erlauben, dass
-  Text an den Anbieter geht.
-- Der Schlüssel liegt im Schlüsselspeicher des Betriebssystems und geht nur an die Adresse, für
-  die er gespeichert wurde.
+- Lokal: Die App misst beim Verbindungstest, wie schnell das Modell auf diesem Rechner liest und
+  schreibt, schätzt die Dauer eines Laufs und zeigt, wann er voraussichtlich fertig ist. Abbrechen
+  stoppt das Modell sofort; ein neuer Lauf macht dort weiter, wo der letzte aufgehört hat.
+- Cloud: Kostenschätzung und Obergrenze vor jedem Lauf; der Schlüssel liegt im Schlüsselspeicher
+  des Betriebssystems und geht nur an die Adresse, für die er gespeichert wurde.
 
 Ohne KI eingerichtet läuft alles lokal, es wird nichts hochgeladen.
+
+**Lokale KI einrichten:** [Ollama](https://ollama.com) installieren, ein Modell laden (z. B.
+`ollama pull gemma4:26b`), in der App „KI einrichten“ → Ollama → „Verbindung testen“. Modelle mit
+rund 25–30 Mrd. Parametern brauchen etwa 20 GB freien Arbeitsspeicher. Auf Rechnern ohne
+Grafikbeschleunigung hängt das Tempo stark vom Modell ab: Auf einem Laptop mit Ryzen AI 7 brauchte
+`gemma4:26b` für ein Kapitel 13 Minuten, `qwen3.8` 70 Minuten – ein ganzer Roman ist etwas für
+nebenbei oder über Nacht. Die App misst das beim Verbindungstest und zeigt die voraussichtliche Dauer.
 
 ## Aufbau
 
@@ -75,7 +86,7 @@ packages/core     Import, Analyse, Buchformat, Bearbeitungsbefehle – läuft in
 packages/cli      Kommandozeile: sprechbuch import | info | validate | export-json | import-json | ai | eval
 apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Tauri als Web-App
 reference/python  Python-Prototyp als Referenz für Paritätstests
-tools/fake-llm    KI-Attrappe für Entwicklung und Tests (Anthropic- und OpenAI-Protokoll, ohne Kosten)
+tools/fake-llm    KI-Attrappe für Entwicklung und Tests (Anthropic-, OpenAI- und Ollama-Protokoll, ohne Kosten)
 docs/             Plan, Buchformat
 fixtures/local    lokale Testbücher (nicht im Repository)
 ```
@@ -102,20 +113,27 @@ node packages/cli/dist/cli.js import mein-buch.epub
 node packages/cli/dist/cli.js info mein-buch.hbook
 ```
 
-KI über die Kommandozeile (Schlüssel aus `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+KI über die Kommandozeile – standardmäßig mit Ollama; <kbd>Strg</kbd>+<kbd>C</kbd> bricht ab und
+speichert, was fertig ist:
+
+```bash
+node packages/cli/dist/cli.js ai mein-buch.hbook --model gemma4:26b --chapters 2-5
+```
+
+Cloud-Anbieter nur mit `--allow-cloud` (Schlüssel aus `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `OPENROUTER_API_KEY` oder `SPRECHBUCH_API_KEY`):
 
 ```bash
-node packages/cli/dist/cli.js ai mein-buch.hbook --model claude-sonnet-5 --chapters 2-5
+node packages/cli/dist/cli.js ai mein-buch.hbook --provider anthropic --model claude-sonnet-5 --allow-cloud
 ```
 
 Qualität an einem in der App geprüften Buch messen – nur Regeln bzw. Regeln + KI:
 
 ```bash
-node packages/cli/dist/cli.js eval mein-buch.hbook --provider anthropic
+node packages/cli/dist/cli.js eval mein-buch.hbook --provider ollama --model gemma4:26b
 ```
 
-Ohne echten Anbieter entwickeln – die Attrappe spricht beide Protokolle:
+Ohne echten Anbieter entwickeln – die Attrappe spricht alle drei Protokolle:
 
 ```bash
 node tools/fake-llm.mjs --port 8787 --key test

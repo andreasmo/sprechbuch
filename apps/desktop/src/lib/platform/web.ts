@@ -1,8 +1,20 @@
+import { isLocalUrl } from "@sprechbuch/core";
 import { readBrowserFile } from "./file";
 import { ACCEPT, type AiBridge, type FileKind, type Platform } from "./types";
 
 /** Web: Schlüssel nur im Arbeitsspeicher dieser Seite – nach dem Neuladen neu eingeben */
 const keys = new Map<string, { baseUrl: string; key: string }>();
+const POLICY_KEY = "sprechbuch:ai-cloud";
+
+function storedAllowCloud(): boolean {
+  try {
+    return localStorage.getItem(POLICY_KEY) === "erlaubt";
+  } catch {
+    return false;
+  }
+}
+
+const denied = (message: string) => ({ status: 403, body: JSON.stringify({ error: { message } }) });
 
 const ai: AiBridge = {
   keyStorage: "memory",
@@ -16,12 +28,31 @@ const ai: AiBridge = {
   async deleteKey(provider) {
     keys.delete(provider);
   },
+  async allowCloud() {
+    return storedAllowCloud();
+  },
+  async setAllowCloud(allow) {
+    if (allow && !storedAllowCloud()
+      && !window.confirm("Mit Cloud-KI kann Kapiteltext an Anbieter wie Anthropic oder OpenAI gehen – bei jedem Buch erst nach einer eigenen Einwilligung. Unveröffentlichte Manuskripte sind oft vertraulich.\n\nCloud-KI in diesem Browser erlauben?")) {
+      return false;
+    }
+    try {
+      if (allow) localStorage.setItem(POLICY_KEY, "erlaubt");
+      else localStorage.removeItem(POLICY_KEY);
+    } catch {
+      /* ohne Speicher gilt wieder „nur lokal“ */
+    }
+    return storedAllowCloud();
+  },
   async transport(req, signal) {
+    if (!isLocalUrl(req.url) && !storedAllowCloud()) {
+      return denied(`Nur lokale KI ist eingeschaltet – ${new URL(req.url).host} liegt nicht auf diesem Rechner oder im lokalen Netz.`);
+    }
     const headers: Record<string, string> = { ...req.headers };
     const stored = keys.get(req.provider);
     if (req.auth !== "none") {
       if (!stored) return { status: 401, body: JSON.stringify({ error: { message: "Kein Schlüssel eingegeben." } }) };
-      if (!req.url.startsWith(stored.baseUrl)) return { status: 403, body: JSON.stringify({ error: { message: `Der Schlüssel gilt nur für ${stored.baseUrl}.` } }) };
+      if (!req.url.startsWith(stored.baseUrl)) return denied(`Der Schlüssel gilt nur für ${stored.baseUrl}.`);
       if (req.auth === "x-api-key") {
         headers["x-api-key"] = stored.key;
         // Anthropic erlaubt Browser-Anfragen nur mit diesem ausdrücklichen Hinweis

@@ -81,6 +81,11 @@ export interface AiBridge {
   keyStatus(provider: string): Promise<AiKeyStatus | null>;
   setKey(provider: string, baseUrl: string, key: string): Promise<void>;
   deleteKey(provider: string): Promise<void>;
+  /** Darf Text an Cloud-Anbieter gehen? Standard: nein („Nur lokale KI“), durchgesetzt im Transport */
+  allowCloud(): Promise<boolean>;
+  /** Erlauben fragt nach (Desktop: nativer Dialog); liefert den neuen Stand */
+  setAllowCloud(allow: boolean): Promise<boolean>;
+  /** Abbrechen über das Signal schließt die Verbindung */
   transport: Transport;
 }
 

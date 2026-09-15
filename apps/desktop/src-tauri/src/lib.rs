@@ -24,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(files::OpenedFiles::default())
         .manage(ai::HttpClient::new())
+        .manage(ai::Pending::default())
         .invoke_handler(tauri::generate_handler![
             files::book_file_read,
             files::book_file_stamp,
@@ -33,8 +34,13 @@ pub fn run() {
             ai::ai_key_set,
             ai::ai_key_delete,
             ai::ai_http,
+            ai::ai_http_cancel,
+            ai::ai_policy,
+            ai::ai_policy_set,
         ])
         .setup(|app| {
+            use tauri::Manager;
+            app.manage(ai::Policy::load(app.path().app_config_dir().ok()));
             let cwd = std::env::current_dir().unwrap_or_default();
             files::push_opened(app.handle(), files::paths_from_args(std::env::args(), &cwd));
             if cfg!(debug_assertions) {

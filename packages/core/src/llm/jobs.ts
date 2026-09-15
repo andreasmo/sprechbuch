@@ -1,7 +1,7 @@
 /**
  * Gemeinsame Bausteine der KI-Aufgaben: ein Auftrag = eine Anfrage mit Auswertung.
  */
-import type { CompletionRequest } from "./client.js";
+import type { CompletionRequest, Timing } from "./client.js";
 
 export interface LlmJob<T> {
   /** eindeutig innerhalb eines Laufs */
@@ -26,6 +26,33 @@ export function estimateJobs(jobs: readonly LlmJob<unknown>[], price: { priceIn:
     output += j.expectedOutput;
   }
   return { requests: jobs.length, input, output, costUsd: (input * price.priceIn + output * price.priceOut) / 1_000_000 };
+}
+
+/** Gemessene Geschwindigkeit eines Modells auf diesem Rechner, in Token pro Sekunde */
+export interface SpeedProfile {
+  promptTps: number;
+  outputTps: number;
+  /** wie viele Token in die Messung eingeflossen sind – je mehr, desto träger ändert sie sich */
+  samples: number;
+}
+
+/** Messung aus einer Antwort in das Profil einrechnen; null, wenn die Antwort keine Zeiten trägt */
+export function updateSpeed(profile: SpeedProfile | null | undefined, timing: Timing | undefined): SpeedProfile | null {
+  if (!timing?.promptMs || !timing.outputMs || !timing.promptTokens || !timing.outputTokens) return profile ?? null;
+  const prompt = timing.promptTokens / (timing.promptMs / 1000);
+  const output = timing.outputTokens / (timing.outputMs / 1000);
+  const weight = timing.promptTokens + timing.outputTokens;
+  if (!profile) return { promptTps: prompt, outputTps: output, samples: weight };
+  // Lange Abschnitte zählen mehr als die kurze Probeanfrage; alte Messungen verblassen langsam
+  const old = Math.min(profile.samples, 200_000);
+  const mix = (a: number, b: number) => (a * old + b * weight) / (old + weight);
+  return { promptTps: mix(profile.promptTps, prompt), outputTps: mix(profile.outputTps, output), samples: old + weight };
+}
+
+/** Voraussichtliche Dauer in Sekunden (ohne Ladezeit des Modells) */
+export function estimateSeconds(jobs: readonly LlmJob<unknown>[], speed: SpeedProfile): number {
+  const { input, output } = estimateJobs(jobs, { priceIn: 0, priceOut: 0 });
+  return input / speed.promptTps + output / speed.outputTps;
 }
 
 export const objectSchema = (properties: Record<string, unknown>) => ({

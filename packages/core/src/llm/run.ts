@@ -3,7 +3,7 @@
  * Ergebnisse kommen einzeln zurück, sobald sie da sind – die App arbeitet sie kapitelweise ein,
  * damit ein Abbruch nichts verliert.
  */
-import { costOf, LlmError, type LlmClient, type Usage } from "./client.js";
+import { costOf, LlmError, type LlmClient, type Timing, type Usage } from "./client.js";
 import { estimateTokens, type LlmJob } from "./jobs.js";
 
 export interface RunOptions<T> {
@@ -13,7 +13,7 @@ export interface RunOptions<T> {
   /** Startet keinen weiteren Auftrag, wenn die Kosten (bisher + geschätzt) darüber lägen */
   maxCostUsd?: number;
   onStart?(job: LlmJob<T>): void;
-  onResult?(job: LlmJob<T>, result: T, usage: Usage): void;
+  onResult?(job: LlmJob<T>, result: T, usage: Usage, timing?: Timing): void | Promise<void>;
   onError?(job: LlmJob<T>, error: LlmError): void;
 }
 
@@ -56,7 +56,7 @@ export async function runJobs<T>(client: LlmClient, jobs: readonly LlmJob<T>[], 
         summary.costUsd = costOf(summary.usage, client.config);
         const parsed = job.parse(res.json);
         summary.done++;
-        opts.onResult?.(job, parsed, res.usage);
+        await opts.onResult?.(job, parsed, res.usage, res.timing);
       } catch (err) {
         const e = err instanceof LlmError ? err : new LlmError("invalid", err instanceof Error ? err.message : String(err));
         if (e.kind === "aborted") {

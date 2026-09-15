@@ -1,15 +1,18 @@
 /**
- * KI-Anbieter: zwei Protokolle decken praktisch alles ab.
+ * KI-Anbieter: drei Protokolle decken praktisch alles ab.
  *
  * - `anthropic`: Anthropic Messages API mit strukturierten Antworten (`output_config.format`).
  * - `openai`: OpenAI-kompatibles `/chat/completions` – OpenAI, OpenRouter, Mistral, Groq,
- *   Azure OpenAI, aber auch lokale Server wie Ollama, LM Studio oder vLLM.
+ *   Azure OpenAI, aber auch lokale Server wie LM Studio oder vLLM.
+ * - `ollama`: Ollamas eigene Schnittstelle `/api/chat`. Nur dort lässt sich das Kontextfenster
+ *   pro Anfrage setzen – über den OpenAI-kompatiblen Weg schneidet Ollama lange Kapitel
+ *   stillschweigend auf wenige tausend Token ab.
  *
  * Schlüssel stehen nie in dieser Konfiguration. Sie liegen im Tresor des Betriebssystems und
  * werden erst im Transport (Desktop: Rust) an die Anfrage gehängt.
  */
 
-export type ProviderKind = "anthropic" | "openai";
+export type ProviderKind = "anthropic" | "openai" | "ollama";
 /** Wie der Schlüssel übergeben wird */
 export type AuthStyle = "x-api-key" | "bearer" | "none";
 /**
@@ -54,7 +57,15 @@ export interface ProviderConfig {
   /** gleichzeitige Anfragen */
   concurrency: number;
   structured: StructuredMode;
+  /**
+   * Kontextfenster in Token (lokale Modelle). Bestimmt, wie lang ein Abschnitt pro Anfrage sein
+   * darf; bei Ollama wird es mit jeder Anfrage gesetzt (`num_ctx`).
+   */
+  contextTokens?: number;
 }
+
+/** Standard-Kontextfenster lokaler Modelle: reicht für ~50 000 Zeichen je Abschnitt plus Antwort */
+export const LOCAL_CONTEXT_TOKENS = 32_768;
 
 export const PRESETS: ProviderPreset[] = [
   {
@@ -98,13 +109,13 @@ export const PRESETS: ProviderPreset[] = [
   {
     id: "ollama",
     label: "Ollama (lokal)",
-    kind: "openai",
-    baseUrl: "http://localhost:11434/v1",
+    kind: "ollama",
+    baseUrl: "http://localhost:11434",
     needsKey: false,
     local: true,
     models: [],
     defaultModel: "",
-    hint: "Ollama installieren und ein Modell laden (z. B. „ollama pull qwen3“). Der Text bleibt auf diesem Rechner.",
+    hint: "Ollama installieren (ollama.com) und ein Modell laden, z. B. „ollama pull gemma4:26b“. Der Text bleibt auf diesem Rechner.",
   },
   {
     id: "lmstudio",
@@ -115,7 +126,7 @@ export const PRESETS: ProviderPreset[] = [
     local: true,
     models: [],
     defaultModel: "",
-    hint: "In LM Studio ein Modell laden und den lokalen Server starten. Der Text bleibt auf diesem Rechner.",
+    hint: "In LM Studio ein Modell laden – Kontextlänge beim Laden mindestens so groß wie unten eingestellt – und den lokalen Server starten. Der Text bleibt auf diesem Rechner.",
   },
   {
     id: "custom",
@@ -146,14 +157,32 @@ export function configFromPreset(preset: ProviderPreset, model = preset.defaultM
     priceOut: m?.priceOut ?? 0,
     concurrency: preset.local ? 1 : 4,
     structured: "schema",
+    ...(preset.local ? { contextTokens: LOCAL_CONTEXT_TOKENS } : {}),
   };
+}
+
+/**
+ * Gespeicherte Einstellungen älterer Versionen nachziehen: Ollama lief früher über den
+ * OpenAI-kompatiblen Weg (`…/v1`), lokale Modelle hatten kein Kontextfenster.
+ */
+export function migrateConfig(config: ProviderConfig): ProviderConfig {
+  const next = { ...config };
+  if (next.preset === "ollama" && next.kind === "openai") {
+    next.kind = "ollama";
+    next.baseUrl = normalizeBaseUrl(next.baseUrl).replace(/\/v1$/, "");
+  }
+  if ((next.local || next.kind === "ollama") && !next.contextTokens) next.contextTokens = LOCAL_CONTEXT_TOKENS;
+  return next;
 }
 
 export const authStyle = (config: Pick<ProviderConfig, "kind" | "needsKey">): AuthStyle =>
   !config.needsKey ? "none" : config.kind === "anthropic" ? "x-api-key" : "bearer";
 
-/** Basis-URL ohne abschließenden Schrägstrich */
-export const normalizeBaseUrl = (url: string) => url.trim().replace(/\/+$/, "");
+/** Basis-URL ohne abschließenden Schrägstrich (bei Ollama auch ohne `/v1` bzw. `/api`) */
+export const normalizeBaseUrl = (url: string, kind?: ProviderKind) => {
+  const base = url.trim().replace(/\/+$/, "");
+  return kind === "ollama" ? base.replace(/\/(v1|api)$/, "") : base;
+};
 
 /** Host für den Datenschutzhinweis („Text geht an api.anthropic.com“) */
 export function hostOf(url: string): string {
@@ -164,13 +193,24 @@ export function hostOf(url: string): string {
   }
 }
 
-/** Läuft der Endpunkt auf diesem Rechner oder im lokalen Netz? */
+/**
+ * Läuft der Endpunkt auf diesem Rechner oder im lokalen Netz? Gleiche Regeln wie `is_local_host`
+ * in `apps/desktop/src-tauri/src/ai.rs` – dort wird „Nur lokale KI“ durchgesetzt.
+ *
+ * Lokal sind: localhost, Loopback, private und Link-Local-Adressen (IPv4 und IPv6), Rechnernamen
+ * ohne Punkt („gpu-box“) sowie die Endungen .local, .lan, .home.arpa und .internal.
+ */
 export function isLocalUrl(url: string): boolean {
+  let h: string;
   try {
-    const h = new URL(url).hostname.replace(/^\[|\]$/g, "");
-    return h === "localhost" || h === "::1" || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith(".local");
+    h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
   } catch {
     return false;
   }
+  if (!h) return false;
+  if (h.includes(":")) return h === "::1" || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h);
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
+    return /^(127|10)\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^169\.254\./.test(h);
+  }
+  return h === "localhost" || !h.includes(".") || /\.(local|lan|home\.arpa|internal)$/.test(h) || h.endsWith(".localhost");
 }

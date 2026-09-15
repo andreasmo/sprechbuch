@@ -7,12 +7,14 @@
 import type { Book, BookChapter, CastEntry, SpeechAnnotation } from "../book/schema.js";
 import type { SpeakerSuggestion } from "../edit/edits.js";
 import { buildLookup, type BookLookup } from "../edit/lookup.js";
+import { contextTokensOf } from "./client.js";
 import { arrayOf, asArray, asNumber, asRecord, asString, clip, estimateTokens, normalizeConfidence, objectSchema, type LlmJob } from "./jobs.js";
 
 /** Ab hier gilt eine Zuordnung als sicher und wird nicht gefragt */
 export const SURE_CONFIDENCE = 0.9;
 /** Kapitel darüber werden in Teile zerlegt */
 const MAX_CHARS = 60_000;
+const MIN_CHARS = 6_000;
 const CONTEXT_BLOCKS = 3;
 
 export interface SpeakerJobOptions {
@@ -22,6 +24,8 @@ export interface SpeakerJobOptions {
   includeSure?: boolean;
   /** auch schon von der KI geprüfte Redeteile erneut fragen */
   recheck?: boolean;
+  /** höchstens so viele Zeichen Kapiteltext je Anfrage (Standard 60 000) – siehe `speakerChunkChars` */
+  maxChars?: number;
 }
 
 const SYSTEM = `Du hilfst bei der Vorbereitung eines Hörbuchs. Für jede markierte Redepassage soll feststehen, welche Figur spricht – danach wählt die Sprecherin die Stimme.
@@ -60,8 +64,24 @@ export function castListText(cast: readonly CastEntry[]): string {
   }).join("\n");
 }
 
+/**
+ * Wird dieser Redeteil gefragt? Schon von der KI eingeschätzte (übernommen, bestätigt oder mit
+ * KI-Vorschlag) nur mit `recheck` – so setzt ein neuer Lauf nach einem Abbruch dort fort.
+ */
 const isAsked = (a: SpeechAnnotation, opts: SpeakerJobOptions) =>
-  a.origin !== "user" && (opts.recheck || a.origin !== "llm") && (opts.includeSure || a.speaker === null || a.confidence < SURE_CONFIDENCE);
+  a.origin !== "user"
+  && (opts.recheck || (a.origin !== "llm" && a.suggestion?.source !== "llm"))
+  && (opts.includeSure || a.speaker === null || a.confidence < SURE_CONFIDENCE);
+
+/**
+ * Wie viel Kapiteltext passt bei einem Kontextfenster von `contextTokens` in eine Anfrage? Gut die
+ * Hälfte des Fensters für die Eingabe (Anweisung, Figurenliste, Text), der Rest bleibt der Antwort.
+ */
+export function speakerChunkChars(book: Book, contextTokens: number): number {
+  const overhead = contextTokensOf(SYSTEM) + contextTokensOf(castListText(book.cast)) + 400;
+  const budget = contextTokens * 0.6 - overhead;
+  return Math.max(MIN_CHARS, Math.min(MAX_CHARS, Math.floor(budget * 2.6)));
+}
 
 interface RenderedPart {
   text: string;
@@ -116,6 +136,7 @@ export function speakerJobs(book: Book, opts: SpeakerJobOptions = {}, lookup = b
   const jobs: LlmJob<SpeakerJobResult>[] = [];
   const castText = castListText(book.cast);
   const wanted = opts.chapters ? new Set(opts.chapters) : null;
+  const maxChars = Math.max(MIN_CHARS, opts.maxChars ?? MAX_CHARS);
 
   book.chapters.forEach((chapter, chapterIndex) => {
     if (wanted && !wanted.has(chapterIndex)) return;
@@ -124,7 +145,7 @@ export function speakerJobs(book: Book, opts: SpeakerJobOptions = {}, lookup = b
     let start = 0;
     let chars = 0;
     chapter.blocks.forEach((b, i) => {
-      if (chars + b.text.length > MAX_CHARS && i > start) {
+      if (chars + b.text.length > maxChars && i > start) {
         parts.push([start, i]);
         start = i;
         chars = 0;

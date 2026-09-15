@@ -14,6 +14,11 @@ Stand: 14.09.2026
 | Lizenz | MIT, Open Source |
 | Signatur | keine; die SmartScreen- bzw. Gatekeeper-Warnung bei unsignierten Installern wird vorerst akzeptiert |
 | Speicherort Entwicklung | außerhalb synchronisierter Cloud-Ordner (Rust-Build und node_modules) |
+| Plattformen | Desktop für Windows, macOS und Linux; auf dem iPad (und in jedem aktuellen Browser) die Web-App zum Lesen, Aufnehmen und für Markierungen, Sprecher und Notizen – keine Änderungen am Buchtext, kein Import, keine KI |
+| Vertraulichkeit | Unveröffentlichte Bücher sind vertraulich. **Nur lokale KI** ist Standard; Cloud-KI muss auf dem Gerät ausdrücklich erlaubt werden (Rust sperrt sonst jede nicht lokale Adresse) und zusätzlich pro Buch |
+| Hosting | vorerst nichts gehostet – die App läuft lokal, `.hbook`-Dateien kommen z. B. per Dropbox aufs iPad |
+| Repository | öffentlich auf GitHub; macOS- und Linux-Builds über GitHub Actions (kein Mac vorhanden) |
+| Testgeräte | Windows 11 (Ryzen AI 7 PRO 350, 92 GB, ohne dedizierte GPU), iPad mit iPadOS 26.6.2 |
 
 ## Phasen
 
@@ -22,9 +27,11 @@ Stand: 14.09.2026
 | **1 – Kern** | TypeScript-Port der Analyse mit Paritätstests; EPUB- und PDF-Import; `.hbook`-Format mit Schema, Querverweisprüfung und Migrationen; CLI; App-Gerüst (Tauri + Svelte) mit Import im Web Worker, Übersicht und Kapitelvorschau | **erledigt** |
 | **2 – Editor & Reader** | Markierungen ändern und hinzufügen (Sprecher per Klick/Taste 1–9, Rede setzen/entfernen/teilen, Satzgrenzen, Betonung, Pause, Notiz, Retake); Figurenverwaltung (umbenennen, zusammenführen, Farbe, Stimmnotiz); **Prüf-Warteschlange**; Rückgängig/Wiederholen; Aufnahmemodus mit allen Funktionen des früheren Studio-Readers (Prompter, Satzvorschau, Fortschritt, Seitenmodus, Suche, Figur isolieren, Satznummern, Atemstellen, Timer); Markierungsliste mit CSV-Export; Autosave (IndexedDB); JSON-Import/-Export in der App | **erledigt** |
 | **3 – Desktop** | atomares Speichern (Vorschlag neben der Quelle), automatisches Speichern in die Datei, Erkennung fremder Änderungen (Cloud-Sync) mit **Zusammenführen**, `.hbook`-Dateiverknüpfung, Öffnen per Doppelklick/„Öffnen mit“/Drag & Drop, eine Instanz, Nachfrage beim Schließen | **erledigt** |
-| **3b – Verteilung Desktop** | Installer (Windows, macOS, Linux) und Updates – **zurückgestellt**, wird zusammen mit macOS neu gedacht | offen |
 | **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | **erledigt** |
-| **5 – Verteilung** | Release-Seite, Web-Version hosten, Tablet-Nutzung in der Kabine (Web-App/PWA mit `.hbook`) | offen |
+| **5a – Lokale KI** | eigener Ollama-Adapter mit passendem Kontextfenster, Abschnitte nach Kontextgröße, Zeitschätzung aus gemessener Geschwindigkeit, echtes Abbrechen, Fortsetzen; „Nur lokale KI“ als Standard mit Sperre in Rust; Test mit echten lokalen Modellen | **erledigt** (Qualitätsmessung an einem geprüften Kapitel offen) |
+| **5b – iPad/Web** | Touch-Bedienung, offline nutzbar, Bildschirm bleibt an, `.hbook` hin und zurück (Dateien-App/Dropbox) mit Zusammenführen auf dem Desktop | offen |
+| **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions; Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | offen |
+| **5d – Veröffentlichung** | öffentliches Repository, Release-Seite, abschaltbarer Update-Hinweis | offen |
 
 ## Ergebnis Phase 1
 
@@ -194,6 +201,83 @@ Adresse, Schlüssel steht weder in localStorage noch in IndexedDB.
 braucht es ein von Hand geprüftes Buch und einen Schlüssel. Ablauf: Buch in der App prüfen, dann
 `sprechbuch eval buch.hbook --provider anthropic --model claude-opus-5` (bzw. Sonnet, lokal).
 
+## Ergebnis Phase 5a
+
+**Befund vorab:** Über Ollamas OpenAI-kompatible Schnittstelle rechnet Ollama mit seinem
+Standard-Kontext von 4 096 Token und schneidet längere Anfragen **stillschweigend** ab – bei einem
+Kapitel mit ~10 000 Token kam nur ein Fünftel an, die Antwort war falsch. Über die eigene
+Schnittstelle mit gesetztem `num_ctx` wurde der ganze Text gelesen und richtig beantwortet.
+
+**Kern** (`packages/core/src/llm`):
+
+- **Ollama als eigenes Protokoll** (`/api/chat`, `/api/show`, `/api/tags`): Kontextfenster je
+  Anfrage (`num_ctx`, Einstellung begrenzt durch das Modell), Antwortschema über `format`,
+  „Nachdenken“ abgeschaltet (kostet lokal Minuten, hilft bei der Zuordnung kaum), Temperatur 0,2.
+  Zu lange Abschnitte werden vor dem Senden abgelehnt, abgeschnittene Antworten erkannt, fehlende
+  Modelle mit „ollama pull …“ gemeldet. Alte Einstellungen (`…/v1`) werden umgestellt.
+- **Andere lokale Server** (LM Studio, vLLM): Verarbeitet der Server deutlich weniger Token, als
+  geschickt wurden, gilt die Antwort als abgeschnitten – mit Hinweis auf die Kontextlänge im Server.
+- **Abschnitte nach Kontextgröße** (`speakerChunkChars`): gut die Hälfte des Fensters für
+  Anweisung, Figurenliste und Kapiteltext, der Rest für die Antwort (32 768 Token → ~47 000 Zeichen).
+- **Zeitschätzung:** Ollama meldet getrennt, wie lange Einlesen und Schreiben dauerten. Daraus
+  entsteht je Rechner und Modell ein Geschwindigkeitsprofil (Probeanfrage beim Verbindungstest,
+  danach mit jeder echten Anfrage gewichtet nachgeführt); daraus Dauer vor dem Start und
+  „voraussichtlich fertig gegen …“ während des Laufs.
+- **Fortsetzen:** Schon von der KI eingeschätzte Redeteile (übernommen, bestätigt oder mit
+  KI-Vorschlag) werden nur mit „erneut prüfen“ wieder gefragt – ein neuer Lauf nach einem Abbruch
+  macht also dort weiter.
+
+**Nur lokale KI** (Standard):
+
+- Desktop: Rust (`ai.rs`) lehnt jede Anfrage an eine Adresse außerhalb dieses Rechners bzw. des
+  lokalen Netzes ab, solange Cloud-KI nicht erlaubt ist – unabhängig davon, was die Oberfläche
+  schickt. Die Einstellung liegt als `ai-policy.json` im Konfigurationsordner der App. Erlauben
+  geht nur über eine native Rückfrage; zurück zu „nur lokal“ ohne. Lokal heißt: Loopback, private
+  und Link-Local-Adressen (IPv4/IPv6), Rechnernamen ohne Punkt, `.local`, `.lan`, `.home.arpa`,
+  `.internal` – gleiche Regeln in Rust und TypeScript, beide getestet.
+- Cloud-Anbieter erscheinen im Einrichtungsdialog als „gesperrt“; mit Erlaubnis braucht jedes Buch
+  weiter eine eigene Einwilligung. Vorgeschlagen wird Ollama.
+- Web-Version: gleiche Sperre im Transport, Erlauben per Browser-Rückfrage. CLI: Cloud nur mit
+  `--allow-cloud`.
+
+**Abbrechen und lange Läufe:** Die Desktop-App bricht die laufende Anfrage in Rust ab und schließt
+die Verbindung – Ollama hört dann auf zu rechnen. Lokale Anfragen haben keine Zeitgrenze mehr
+(vorher 15 min), Cloud-Anfragen weiter 15 min. Die CLI schickt lokale Anfragen ohne die
+5-Minuten-Grenze von `fetch`, bricht mit Strg+C sauber ab, speichert Erreichtes und sichert lange
+Läufe alle zwei Minuten zwischendurch.
+
+**Gemessen mit echtem Ollama** (Windows-Laptop, Ryzen AI 7 PRO 350, 92 GB, Modell läuft auf der CPU):
+
+| | Einlesen | Schreiben | Kapitel „II – Der Schwätzer“ (24 000 Zeichen, 66 unsichere Redeteile) |
+|---|---|---|---|
+| `gemma4:26b` | 41 Token/s | 5,8 Token/s | 13 min, 8 429 + 3 182 Token, 64 eingeschätzt: 35 bestätigt, 28 geändert, 1 × „keine Rede“, 2 neue Figuren |
+| `qwen3.8` (27B) | 3 Token/s | 3,1 Token/s | 70 min, 8 741 + 4 337 Token, 66 eingeschätzt: 35 bestätigt, 30 geändert, 1 × „keine Rede“, 2 neue Figuren |
+
+- Beide Modelle kommen unabhängig voneinander bei 59 von 64 Redeteilen zum selben Ergebnis; die
+  5 Abweichungen betreffen Nebenfiguren („die vier Leute“ gegen „Leoparden“). Beide räumen eine von
+  den Regeln erfundene Figur („seiner bestürzten Hörer“) ab. Übereinstimmung ist noch keine
+  Trefferquote, aber ein gutes Zeichen.
+- Auf CPU ist `gemma4:26b` die brauchbare Wahl; `qwen3.8` liest hier mehr als zehnmal langsamer.
+- Bei `gemma4:26b` dominiert das Schreiben (~9 von 13 min). Die kurze Probe beim Verbindungstest misst schneller
+  (46/10 Token/s), weil lange Abschnitte pro Token langsamer werden – die erste Schätzung ist daher
+  zu optimistisch und wird nach dem ersten Kapitel korrigiert. Ein ganzer Roman: grob 2–3 Stunden.
+- Stichprobe der 28 Änderungen: überwiegend erkennbar richtig (u. a. eine Rede direkt vor „fragte
+  Hamilton“, die die Regeln Sanders zugeordnet hatten; Anreden wie „alter Ham“). Das Modell gibt fast
+  überall 90 % an – zu selbstsicher, deshalb landete nichts in der Prüfung. Ob das stimmt, zeigt erst
+  die Messung an einem von Hand geprüften Kapitel.
+
+**Geprüft:** 79 Kern-Tests (neu: Ollama-Anfragen und -Antworten, Kontextbegrenzung, zu lange
+Abschnitte, fehlendes Modell, abgelehntes `think`, abgeschnittene Eingaben bei LM Studio, lokale
+Adressen, Umstellung alter Einstellungen, Abschnittsgröße, Fortsetzen, Zeitschätzung), 10 Rust-Tests
+(neu: lokale Adressen, Sperre, gespeicherte Einstellung) – und in der echten Desktop-App:
+Ollama-Attrappe (23 Prüfungen: Voreinstellung „nur lokal“, Cloud-Vorlagen gesperrt, Modelle aus
+`/api/tags`, Geschwindigkeitsmessung, Dauer vor dem Start, „fertig gegen“, Abbrechen schließt die
+Verbindung, zweiter Lauf fragt nur die übrigen Kapitel, Rust sperrt Cloud-Adressen auch am Dialog
+vorbei, native Rückfrage abgelehnt/bestätigt, zurück ohne Rückfrage), echtes Ollama über den
+Rust-Proxy (Modellliste, Verbindungstest mit Messung), Phase-4-Ablauf mit Anthropic-Protokoll
+(21 Prüfungen) sowie Speichern/Sync und Neustart ohne Rückschritte. Web-Version im Browser: Sperre,
+gesperrte Vorlagen, Modellliste direkt vom lokalen Ollama.
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
@@ -201,9 +285,13 @@ braucht es ein von Hand geprüftes Buch und einen Schlüssel. Ablauf: Buch in de
 - Sprecherzuordnung: rund ein Drittel der Redeteile ist nach den Regeln geraten (Nähe,
   Wechselrede). Prüf-Warteschlange und KI helfen; wie gut echte Modelle sind, ist noch nicht an einem
   geprüften Buch gemessen.
-- KI: keine Batch-API (halber Preis, asynchron) und kein Prompt-Caching; ein laufender Auftrag
-  lässt sich abbrechen, die gerade laufende Anfrage wird aber noch zu Ende bezahlt. Die
-  Tokenschätzung ist grob (Zeichen ÷ 3).
+- KI: keine Batch-API (halber Preis, asynchron) und kein Prompt-Caching. Abbrechen schließt die
+  Verbindung; ein lokales Modell hört auf zu rechnen, ein Cloud-Anbieter berechnet die angefangene
+  Anfrage womöglich trotzdem. Die Tokenschätzung ist grob (Zeichen ÷ 3; gemessen bei Gemma 4 für
+  deutschen Text: 3,07).
+- Lokale KI: Die Zeitschätzung beruht auf der gemessenen Geschwindigkeit; lange Abschnitte lesen
+  sich pro Token etwas langsamer als die kurze Probe, die Ladezeit des Modells ist nicht enthalten.
+  Wie gut lokale Modelle zuordnen, ist noch nicht an einem von Hand geprüften Buch gemessen.
 - In der Web-Version heißt Speichern Herunterladen – eine vorhandene Datei kann dort nicht
   überschrieben werden. Beim erneuten Öffnen erkennt die App die heruntergeladene Fassung am Hash
   wieder.

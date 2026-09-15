@@ -1,14 +1,22 @@
 <script lang="ts">
   import { countAsked, hostOf, openPronunciations } from "@sprechbuch/core";
+  import { onMount } from "svelte";
   import { fmt } from "../labels";
-  import { aiDialog, aiRunFor, aiSettings, hasConsent, setConsent, type AiTask } from "../store/ai.svelte";
+  import {
+    aiDialog, aiPolicy, aiRunFor, aiSettings, blockedByPolicy, formatDuration, hasConsent, isLocal, refreshPolicy, setConsent, speedFor,
+    type AiTask,
+  } from "../store/ai.svelte";
   import type { BookSession } from "../store/session.svelte";
 
   let { session, onReview }: { session: BookSession; onReview: () => void } = $props();
 
+  onMount(() => void refreshPolicy(session.platform));
+
   const run = $derived(aiRunFor(session));
   const config = $derived(aiSettings.config);
-  const consent = $derived(!!config && (config.local || hasConsent(session.book.id, config)));
+  const local = $derived(!!config && isLocal(config));
+  const blocked = $derived(blockedByPolicy(config));
+  const consent = $derived(!!config && !blocked && (local || hasConsent(session.book.id, config)));
   const book = $derived(session.book);
 
   // Kapitelauswahl für die Sprecherprüfung (1-basiert in der Oberfläche)
@@ -36,8 +44,10 @@
     if (!e || !config) return "";
     if (!e.requests) return "nichts zu tun";
     const money = config.priceIn + config.priceOut ? ` · ca. ${cost(e.costUsd)}` : "";
-    return `${fmt(e.requests)} Anfrage${e.requests === 1 ? "" : "n"} · ca. ${tokens(e.input + e.output)} Token${money}`;
+    const time = e.seconds !== null ? ` · Dauer ${formatDuration(e.seconds)}` : "";
+    return `${fmt(e.requests)} Anfrage${e.requests === 1 ? "" : "n"} · ca. ${tokens(e.input + e.output)} Token${money}${time}`;
   }
+  const clock = (ms: number) => new Date(ms).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
   let selected = $state<Record<string, boolean>>({});
   $effect(() => {
@@ -59,7 +69,7 @@
   const start = (task: AiTask) => config && consent && void run.start(task, config, opts);
 </script>
 
-<section class="panel card ai">
+<section class="panel card ai" data-cloud={aiPolicy.allowCloud ? "erlaubt" : "gesperrt"}>
   <div class="card-head">
     <h2>KI-Assistent</h2>
     {#if config}
@@ -71,13 +81,23 @@
 
   {#if !config}
     <p class="muted">
-      Eine KI kann die unsicheren Sprecherzuordnungen vorab prüfen, doppelte Figuren finden und Aussprachen vorschlagen. Dafür
-      brauchst du einen eigenen Zugang (z. B. Anthropic) oder ein Modell auf deinem Rechner (Ollama, LM Studio).
+      Eine KI kann die unsicheren Sprecherzuordnungen vorab prüfen, doppelte Figuren finden und Aussprachen vorschlagen – am
+      besten ein Modell auf deinem Rechner (Ollama, LM Studio), dann bleibt der Buchtext hier.
     </p>
     <div><button class="primary" onclick={() => (aiDialog.open = true)}>KI einrichten</button></div>
   {:else}
-    {#if config.local}
-      <p class="privacy small ok">Läuft lokal ({hostOf(config.baseUrl)}) – der Text bleibt auf diesem Rechner.</p>
+    {#if blocked}
+      <p class="privacy small needed">
+        <span>
+          <strong>Nur lokale KI ist eingeschaltet</strong> – {hostOf(config.baseUrl)} ist gesperrt. In den Einstellungen ein lokales Modell
+          wählen oder Cloud-KI ausdrücklich erlauben.
+        </span>
+      </p>
+    {:else if local}
+      <p class="privacy small ok">
+        Läuft lokal ({hostOf(config.baseUrl)}) – der Text bleibt auf diesem Rechner.
+        {#if !speedFor(config)}<span class="muted">„Verbindung testen“ in den Einstellungen misst die Geschwindigkeit für die Zeitschätzung.</span>{/if}
+      </p>
     {:else}
       <label class="privacy small" class:needed={!consent}>
         <input type="checkbox" checked={consent} onchange={(e) => setConsent(book.id, config, e.currentTarget.checked)} />
@@ -94,6 +114,7 @@
         <p class="small">
           {fmt(run.done)} von {fmt(run.total)} Anfragen{run.active.length ? ` · läuft: ${run.active.join(", ")}` : ""}
           {#if config.priceIn + config.priceOut} · bisher {cost(run.costUsd)}{/if}
+          {#if run.finishAt} · voraussichtlich fertig gegen {clock(run.finishAt)} Uhr{/if}
         </p>
         <button onclick={() => run.cancel()}>Abbrechen</button>
       </div>
@@ -116,7 +137,7 @@
           <p class="muted small">
             {fmt(run.summary.usage.input + run.summary.usage.output)} Token{config.priceIn + config.priceOut ? ` · ${cost(run.summary.costUsd)}` : ""}
             {#if run.summary.stopped === "cost"} · an der Kostengrenze angehalten{/if}
-            {#if run.summary.stopped === "aborted"} · abgebrochen, bisherige Ergebnisse sind eingearbeitet{/if}
+            {#if run.summary.stopped === "aborted"} · abgebrochen, bisherige Ergebnisse sind eingearbeitet – ein neuer Lauf macht dort weiter{/if}
             {#if run.summary.failed} · {fmt(run.summary.failed)} fehlgeschlagen: {run.summary.errors.map((e) => `${e.label}: ${e.message}`).join("; ")}{/if}
           </p>
         {/if}
@@ -178,7 +199,7 @@
         <button disabled={!consent || run.running || !openTerms} onclick={() => start("pronunciation")}>Vorschlagen lassen</button>
       </div>
     </div>
-    {#if !consent}<p class="muted small">Erst die Einwilligung oben setzen.</p>{/if}
+    {#if !consent && !blocked}<p class="muted small">Erst die Einwilligung oben setzen.</p>{/if}
   {/if}
 </section>
 
