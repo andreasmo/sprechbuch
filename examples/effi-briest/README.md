@@ -9,7 +9,7 @@ Rechtschreibung und Zeichensetzung wie dort.
 | `kapitel-1.txt` | der Text des ersten Kapitels, ein Absatz pro Zeile |
 | `make-epub.mjs` | baut daraus `effi-briest-kapitel-1.epub` |
 | `effi-briest-kapitel-1.epub` | kleines EPUB 3 – zum Ausprobieren des Imports |
-| `effi-briest-kapitel-1.hbook` | das Ergebnis der Analyse, so wie die App es öffnet |
+| `effi-briest-kapitel-1.hbook` | das Ergebnis, so wie die App es öffnet: Regeln, danach mit lokaler KI (Ollama) den Figuren zugeordnet |
 
 Das Kapitel ist ein guter Prüfstein: Effi, ihre Mutter und drei Freundinnen reden schnell
 durcheinander, oft ohne „sagte sie“. Die Regeln raten dort viel (Wechselrede) – genau dafür gibt
@@ -23,4 +23,6 @@ Neu erzeugen:
 node examples/effi-briest/make-epub.mjs
 npm run build:cli
 node packages/cli/dist/cli.js import examples/effi-briest/effi-briest-kapitel-1.epub
+# optional: Figuren mit lokaler KI zuordnen (Ollama muss laufen)
+node packages/cli/dist/cli.js ai examples/effi-briest/effi-briest-kapitel-1.hbook
 ```
