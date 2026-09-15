@@ -17,7 +17,7 @@ Stand: 14.09.2026
 | Plattformen | Desktop für Windows, macOS und Linux; auf dem iPad (und in jedem aktuellen Browser) die Web-App zum Lesen, Aufnehmen und für Markierungen, Sprecher und Notizen – keine Änderungen am Buchtext, kein Import, keine KI |
 | Vertraulichkeit | Unveröffentlichte Bücher sind vertraulich. **Nur lokale KI** ist Standard; Cloud-KI muss auf dem Gerät ausdrücklich erlaubt werden (Rust sperrt sonst jede nicht lokale Adresse) und zusätzlich pro Buch |
 | Hosting | Bücher werden nie gehostet. Die **Lese-App** (nur Code) liegt auf GitHub Pages, damit sie aufs iPad kommt; `.hbook`-Dateien kommen per Dropbox o. ä. |
-| Repository | öffentlich auf GitHub; macOS- und Linux-Builds über GitHub Actions (kein Mac vorhanden) |
+| Repository | öffentlich: <https://github.com/andreasmo/sprechbuch>; Lese-App unter <https://andreasmo.github.io/sprechbuch/>; macOS- und Linux-Builds über GitHub Actions (kein Mac vorhanden) |
 | Testgeräte | Windows 11 (Ryzen AI 7 PRO 350, 92 GB, ohne dedizierte GPU), iPad mit iPadOS 26.6.2 |
 
 ## Phasen
@@ -31,7 +31,7 @@ Stand: 14.09.2026
 | **5a – Lokale KI** | eigener Ollama-Adapter mit passendem Kontextfenster, Abschnitte nach Kontextgröße, Zeitschätzung aus gemessener Geschwindigkeit, echtes Abbrechen, Fortsetzen; „Nur lokale KI“ als Standard mit Sperre in Rust; Test mit echten lokalen Modellen | **erledigt** (Qualitätsmessung an einem geprüften Kapitel offen) |
 | **5b – iPad/Web** | Lese-App (ohne Import/KI) für GitHub Pages: offline, Touch-Bedienung, Bildschirm bleibt an, `.hbook` hin und zurück (Teilen → Dateien/Dropbox) mit Übergabe-Protokoll, das die Desktop-App auf ihren Stand überträgt | **erledigt** (Test auf dem echten iPad offen) |
 | **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions; Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | offen |
-| **5d – Veröffentlichung** | öffentliches Repository, Release-Seite, abschaltbarer Update-Hinweis | offen |
+| **5d – Veröffentlichung** | öffentliches Repository und Lese-App auf GitHub Pages (**erledigt**, mit gemeinfreiem Beispielkapitel); Release-Seite, abschaltbarer Update-Hinweis | teilweise |
 
 ## Ergebnis Phase 1
 
