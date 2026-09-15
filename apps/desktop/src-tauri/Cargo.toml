@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Sprechbuch – Bücher als Leseskript für die Hörbuch-Aufnahme"
 authors = ["Sprechbuch contributors"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/andreasmo/sprechbuch"
 edition = "2021"
 rust-version = "1.77.2"
 

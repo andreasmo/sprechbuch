@@ -3,6 +3,25 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 
+/** Beispielbuch (gemeinfrei) – in der App unter „Beispiel ansehen“ */
+const EXAMPLE = { url: "beispiel/effi-briest-kapitel-1.hbook", from: "../../examples/effi-briest/effi-briest-kapitel-1.hbook" };
+
+function example(): Plugin {
+  const bytes = () => readFileSync(new URL(EXAMPLE.from, import.meta.url));
+  return {
+    name: "sprechbuch-beispiel",
+    configureServer(server) {
+      server.middlewares.use(`/${EXAMPLE.url}`, (_req, res) => {
+        res.setHeader("content-type", "application/octet-stream");
+        res.end(bytes());
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: EXAMPLE.url, source: bytes() });
+    },
+  };
+}
+
 // Tauri erwartet einen festen Port und liest TAURI_* aus der Umgebung.
 const host = process.env.TAURI_DEV_HOST;
 
@@ -70,7 +89,7 @@ function leseApp(): Plugin {
 
       // Alles vorab in den Cache – außer pdf.js, das die Lese-App nie lädt
       const files = Object.keys(bundle).filter((f) => !/pdf/i.test(f) && !f.endsWith(".map"));
-      const precache = ["./", ...files, "manifest.webmanifest", ...ICONS.map((i) => i.src)];
+      const precache = [...new Set(["./", ...files, "manifest.webmanifest", EXAMPLE.url, ...ICONS.map((i) => i.src)])];
       // Version aus Dateiliste und Worker-Code – ändert sich eins davon, lädt das Gerät neu
       const version = createHash("sha256").update(precache.join("\n") + serviceWorker("", precache)).digest("hex").slice(0, 12);
       this.emitFile({ type: "asset", fileName: "sw.js", source: serviceWorker(version, precache) });
@@ -117,7 +136,7 @@ self.addEventListener("fetch", (event) => {
 // VITE_EDITION kommt für die Oberfläche aus .env.lesen.
 export default defineConfig(({ mode }) => ({
   base: mode === "lesen" ? "./" : "/",
-  plugins: [svelte(), ...(mode === "lesen" ? [leseApp()] : [])],
+  plugins: [svelte(), example(), ...(mode === "lesen" ? [leseApp()] : [])],
   clearScreen: false,
   server: {
     port: 1420,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImportStage } from "@sprechbuch/core";
+  import { sha256Hex, type ImportStage } from "@sprechbuch/core";
   import { onMount } from "svelte";
   import ImportProgress from "./lib/components/ImportProgress.svelte";
   import { LESE_APP } from "./lib/edition";
@@ -192,6 +192,19 @@
     }
   }
 
+  /** Das gemeinfreie Beispiel („Effi Briest“, erstes Kapitel), das mit der App ausgeliefert wird */
+  async function openExample() {
+    if (!platform) return;
+    try {
+      const res = await fetch(new URL("beispiel/effi-briest-kapitel-1.hbook", document.baseURI));
+      if (!res.ok) throw new Error(`Das Beispiel ließ sich nicht laden (${res.status}).`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      await load({ name: "effi-briest-kapitel-1.hbook", bytes, stamp: { size: bytes.length, modifiedMs: Date.now(), sha256: await sha256Hex(bytes) } });
+    } catch (err) {
+      view = { name: "error", message: errorText(err) };
+    }
+  }
+
   async function pick() {
     if (!platform) return;
     try {
@@ -262,7 +275,7 @@
     </header>
     <main>
       {#if view.name === "start"}
-        <Start onPick={pick} onDrop={load} onOpenRecent={openRecent} ready={platform !== null} {dragOver} />
+        <Start onPick={pick} onDrop={load} onOpenRecent={openRecent} onExample={openExample} ready={platform !== null} {dragOver} />
       {:else if view.name === "working"}
         <ImportProgress file={view.file} stage={view.stage} />
       {:else if view.name === "error"}

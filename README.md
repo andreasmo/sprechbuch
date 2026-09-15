@@ -90,6 +90,15 @@ Grafikbeschleunigung hängt das Tempo stark vom Modell ab: Auf einem Laptop mit 
 `gemma4:26b` für ein Kapitel 13 Minuten, `qwen3.8` 70 Minuten – ein ganzer Roman ist etwas für
 nebenbei oder über Nacht. Die App misst das beim Verbindungstest und zeigt die voraussichtliche Dauer.
 
+## Ausprobieren
+
+Auf der Startseite öffnet **„Beispiel ansehen“** das erste Kapitel von Theodor Fontanes
+*Effi Briest* (gemeinfrei) – mit allen Markierungen, Prüf-Warteschlange und Aufnahmemodus. Die
+Dateien dazu liegen in [examples/effi-briest](examples/effi-briest).
+
+**Lese-App im Browser oder auf dem iPad:** <https://andreasmo.github.io/sprechbuch/> – auf dem iPad in
+Safari öffnen, „Teilen → Zum Home-Bildschirm“.
+
 ## Aufbau
 
 ```
@@ -99,6 +108,7 @@ apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Taur
 reference/python  Python-Prototyp als Referenz für Paritätstests
 tools/fake-llm    KI-Attrappe für Entwicklung und Tests (Anthropic-, OpenAI- und Ollama-Protokoll, ohne Kosten)
 docs/             Plan, Buchformat
+examples/         gemeinfreies Beispielkapitel (EPUB, .hbook)
 fixtures/local    lokale Testbücher (nicht im Repository)
 ```
 

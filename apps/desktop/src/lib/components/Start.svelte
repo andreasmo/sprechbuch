@@ -5,10 +5,11 @@
   import { appUpdate, applyUpdate } from "../pwa.svelte";
   import { deleteBook, listRecent, type RecentEntry } from "../store/persist";
 
-  let { onPick, onDrop, onOpenRecent, ready, dragOver = false }: {
+  let { onPick, onDrop, onOpenRecent, onExample, ready, dragOver = false }: {
     onPick: () => void;
     onDrop: (file: PickedFile) => void;
     onOpenRecent: (id: string) => void;
+    onExample: () => void;
     ready: boolean;
     /** Desktop: Datei wird gerade über das Fenster gezogen */
     dragOver?: boolean;
@@ -89,6 +90,7 @@
     <p><strong>{LESE_APP ? ".hbook-Datei hierher ziehen" : "EPUB, PDF oder .hbook hierher ziehen"}</strong></p>
     <div class="actions">
       <button class="primary" disabled={!ready} onclick={onPick}>{LESE_APP ? "Sprechbuch-Datei öffnen …" : "Datei öffnen …"}</button>
+      <button class="ghost" disabled={!ready} onclick={onExample} title="Theodor Fontane, Effi Briest (1896) – gemeinfrei">Beispiel ansehen: Effi Briest, 1. Kapitel</button>
     </div>
     <p class="muted small">
       {LESE_APP
@@ -132,7 +134,7 @@
   .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
   .drop p { margin: 0.3rem 0; }
   .big { font-size: 2.2rem; }
-  .actions { margin: 0.8rem 0; }
+  .actions { margin: 0.8rem 0; display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; }
   .recent h2 { font-size: 1rem; margin-bottom: 0.6rem; }
   .recent ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
   .recent li { display: flex; align-items: stretch; box-shadow: none; }
