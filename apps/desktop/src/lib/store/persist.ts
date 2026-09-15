@@ -42,27 +42,59 @@ export interface RecentEntry {
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function db(): Promise<IDBDatabase> {
-  dbPromise ??= new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  const opening: Promise<IDBDatabase> = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, VERSION);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains("books")) d.createObjectStore("books", { keyPath: "id" });
       if (!d.objectStoreNames.contains("sources")) d.createObjectStore("sources", { keyPath: "id" });
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const d = req.result;
+      // Safari trennt die Verbindung z. B., wenn der Tab im Hintergrund lag – dann beim nächsten Mal neu öffnen
+      const forget = () => {
+        if (dbPromise === current) dbPromise = null;
+      };
+      d.onclose = forget;
+      d.onversionchange = () => {
+        d.close();
+        forget();
+      };
+      resolve(d);
+    };
+    req.onerror = () => reject(req.error ?? new Error("Der App-Speicher lässt sich nicht öffnen."));
   });
-  return dbPromise;
+  const current = opening.catch((err: unknown) => {
+    if (dbPromise === current) dbPromise = null;
+    throw err;
+  });
+  dbPromise = current;
+  return current;
 }
 
-function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return db().then((d) => new Promise<T>((resolve, reject) => {
+function run<T>(d: IDBDatabase, store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     const t = d.transaction(store, mode);
     const req = fn(t.objectStore(store));
     t.oncomplete = () => resolve(req.result);
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error);
-  }));
+    // Scheitert eine Anfrage, steht der Grund an ihr – t.error ist in dem Moment noch null
+    const fail = () => reject(req.error ?? t.error ?? new Error("Der App-Speicher hat den Vorgang abgebrochen."));
+    t.onerror = fail;
+    t.onabort = fail;
+  });
+}
+
+async function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  const current = db();
+  try {
+    return await run(await current, store, mode, fn);
+  } catch {
+    // Verbindung verloren oder geschlossen: einmal mit frischer Verbindung wiederholen (put/get/delete sind wiederholbar)
+    if (dbPromise === current) dbPromise = null;
+    void current.then((d) => d.close()).catch(() => {});
+    return run(await db(), store, mode, fn);
+  }
 }
 
 export const saveSnapshot = (s: Snapshot) => tx("books", "readwrite", (st) => st.put(s)).then(() => undefined);

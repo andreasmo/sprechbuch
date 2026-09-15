@@ -129,15 +129,16 @@
             {/if}
           </p>
         {/if}
-        <CastPicker {session} chapterId={chapter.id} current={speech.speaker} autofocus={!pop.alt}
-          onPick={(id) => act({ type: "setSpeaker", ids: [speech.id], speaker: id })} />
-        <div class="row">
+        <!-- Die Knöpfe vor der Figurenliste – so bleiben sie auch bei vielen Figuren ohne Scrollen erreichbar -->
+        <div class="row actions">
           {#if speech.origin !== "user"}
             <button class="primary" onclick={() => act({ type: "confirmSpeech", ids: [speech.id] })}>Stimmt</button>
           {/if}
           <button onclick={() => splitHere(speech.id, hit.offset)} title="Die Rede an der geklickten Stelle teilen">Ab hier andere Figur</button>
           <button class="danger" onclick={() => act({ type: "removeAnnotation", id: speech.id })}>Keine Rede</button>
         </div>
+        <CastPicker {session} chapterId={chapter.id} current={speech.speaker} autofocus={!pop.alt}
+          onPick={(id) => act({ type: "setSpeaker", ids: [speech.id], speaker: id })} />
       {/if}
       {#each anns.filter((a) => a.type !== "speech") as a (a.id)}
         <div class="mark">
@@ -199,6 +200,7 @@
   .alt { margin: -0.2rem 0 0.5rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .alt button { padding: 0.1rem 0.45rem; margin-left: 0.3rem; }
   .row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+  .row.actions { margin: 0 0 0.6rem; }
   .mark { display: grid; gap: 0.35rem; border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.6rem; }
   .mark button { justify-self: start; }
   textarea { width: 100%; resize: vertical; }

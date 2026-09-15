@@ -585,7 +585,7 @@ export class BookSession {
       journal: dirty ? $state.snapshot(this.journal()) : [],
       sourcePath: this.sourcePath,
       handover: this.#handover,
-    }).catch((err) => this.notify(`Automatische Sicherung fehlgeschlagen: ${String(err)}`, "error"));
+    }).catch((err) => this.notify(`Automatische Sicherung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`, "error"));
   }
 
   notify(text: string, kind: Toast["kind"] = "info"): void {
