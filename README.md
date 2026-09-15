@@ -7,10 +7,11 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 5b (Lese-App fürs iPad).** Import, Analyse, Buchformat, Bearbeiten, Prüfen,
-> Aufnahmemodus, sicheres Speichern mit Cloud-Sync-Abgleich, KI-Unterstützung (bevorzugt lokal) und
-> die Lese-App für Tablet und Browser sind fertig und getestet. Als Nächstes: Installer für Windows,
-> macOS und Linux und die Veröffentlichung – siehe [docs/PLAN.md](docs/PLAN.md).
+> **Status: Version 0.1 – die erste Veröffentlichung.** Import, Analyse, Buchformat, Bearbeiten,
+> Prüfen, Aufnahmemodus, sicheres Speichern mit Cloud-Sync-Abgleich, KI-Unterstützung (bevorzugt
+> lokal) und die Lese-App für Tablet und Browser sind fertig und unter Windows getestet. Installer
+> gibt es unter [Releases](https://github.com/andreasmo/sprechbuch/releases/latest); was noch offen
+> ist, steht in [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
 
@@ -90,6 +91,17 @@ Grafikbeschleunigung hängt das Tempo stark vom Modell ab: Auf einem Laptop mit 
 `gemma4:26b` für ein Kapitel 13 Minuten, `qwen3.8` 70 Minuten – ein ganzer Roman ist etwas für
 nebenbei oder über Nacht. Die App misst das beim Verbindungstest und zeigt die voraussichtliche Dauer.
 
+## Installieren
+
+Die Desktop-App gibt es unter **[Releases](https://github.com/andreasmo/sprechbuch/releases/latest)**.
+Die Installer sind nicht signiert – das Betriebssystem warnt deshalb beim ersten Start.
+
+| System | Datei | Beim ersten Start |
+|---|---|---|
+| Windows 10/11 | `Sprechbuch_…_x64-setup.exe` (installiert ohne Adminrechte) | SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“ |
+| macOS ab 13.3, Apple Silicon und Intel | `Sprechbuch_…_universal.dmg` | Öffnen versuchen, dann Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“. Meldet macOS, die App sei beschädigt: `xattr -dr com.apple.quarantine /Applications/Sprechbuch.app`. Bisher nicht auf einem echten Mac getestet. |
+| Linux (x86-64) | `Sprechbuch_…_amd64.AppImage` oder `.deb` | – (Schlüssel für Cloud-KI brauchen einen Schlüsselspeicher wie GNOME Schlüsselbund oder KWallet; lokale KI geht ohne) |
+
 ## Ausprobieren
 
 Auf der Startseite öffnet **„Beispiel ansehen“** das erste Kapitel von Theodor Fontanes
@@ -167,6 +179,10 @@ Desktop-Installer bauen (unsigniert – Windows zeigt beim ersten Start eine Sma
 ```bash
 npm run tauri -w @sprechbuch/desktop -- build
 ```
+
+Release: Version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml` und
+den `package.json` erhöhen, Tag `vX.Y.Z` pushen. Der Workflow *Release* baut die Installer für alle
+drei Systeme in einen Entwurf; nach dem Prüfen wird er auf GitHub veröffentlicht.
 
 ### Paritätstest gegen die Python-Referenz
 

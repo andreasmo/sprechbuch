@@ -1,6 +1,6 @@
 # Plan
 
-Stand: 14.09.2026
+Stand: 15.09.2026
 
 ## Entscheidungen
 
@@ -30,8 +30,8 @@ Stand: 14.09.2026
 | **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | **erledigt** |
 | **5a – Lokale KI** | eigener Ollama-Adapter mit passendem Kontextfenster, Abschnitte nach Kontextgröße, Zeitschätzung aus gemessener Geschwindigkeit, echtes Abbrechen, Fortsetzen; „Nur lokale KI“ als Standard mit Sperre in Rust; Test mit echten lokalen Modellen | **erledigt** (Qualitätsmessung an einem geprüften Kapitel offen) |
 | **5b – iPad/Web** | Lese-App (ohne Import/KI) für GitHub Pages: offline, Touch-Bedienung, Bildschirm bleibt an, `.hbook` hin und zurück (Teilen → Dateien/Dropbox) mit Übergabe-Protokoll, das die Desktop-App auf ihren Stand überträgt | **erledigt** (Test auf dem echten iPad offen) |
-| **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions; Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | offen |
-| **5d – Veröffentlichung** | öffentliches Repository und Lese-App auf GitHub Pages (**erledigt**, mit gemeinfreiem Beispielkapitel); Release-Seite, abschaltbarer Update-Hinweis | teilweise |
+| **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions (**erledigt**, Workflow *Release*); Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | teilweise |
+| **5d – Veröffentlichung** | öffentliches Repository und Lese-App auf GitHub Pages (**erledigt**, mit gemeinfreiem Beispielkapitel); Release-Seite (**erledigt**, Version 0.1.0); abschaltbarer Update-Hinweis | teilweise |
 
 ## Ergebnis Phase 1
 
@@ -327,6 +327,22 @@ KI-Ablauf ohne Rückschritte.
 **Nicht geprüft:** echtes iPad (Safari/WebKit, Teilen-Menü, „In Dateien sichern“ in Dropbox,
 Home-Bildschirm-App, Wake Lock) – das geht erst mit der veröffentlichten Seite.
 
+## Version 0.1.0
+
+Erste Veröffentlichung mit Installern für Windows (NSIS, ohne Adminrechte), macOS (Universal-DMG ab
+13.3, ad hoc signiert, damit die App auf Apple Silicon startet) und Linux (AppImage, .deb, gebaut auf
+Ubuntu 22.04). Der Workflow *Release* baut sie bei jedem Tag `v*` in einen Entwurf, der nach dem
+Prüfen veröffentlicht wird.
+
+Dazu **Randnotizen**: Notizen stehen beim Bearbeiten und Aufnehmen links neben der Zeile, in der sie
+beginnen – beim Einsprechen aus dem Augenwinkel sichtbar. Dicht folgende Notizen stapeln sich, der
+Fokus-Modus dimmt nur den Text, im Seitenmodus rutscht keine Notiz auf die nächste Seite. Das
+Beispielkapitel ist mit lokaler KI den Figuren zugeordnet.
+
+**Geprüft:** Kern- und App-Tests, Typprüfung; Randnotizen in Chromium im Scroll- und Seitenmodus, im
+Fokus-Modus, beim Bearbeiten (Antippen öffnet die Notiz), als iPad hochkant, Handy und im dunklen
+Thema; die lokal gebaute Release-App (WebView2) mit Beispiel und Notiz; der Windows-Installer baut.
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
@@ -344,8 +360,10 @@ Home-Bildschirm-App, Wake Lock) – das geht erst mit der veröffentlichten Seit
 - In der Web-Version heißt Speichern Herunterladen – eine vorhandene Datei kann dort nicht
   überschrieben werden. Beim erneuten Öffnen erkennt die App die heruntergeladene Fassung am Hash
   wieder.
-- Die Dateiverknüpfung wirkt erst mit einem Installer (zurückgestellt). Bis dahin: „Öffnen mit“
-  auf die `sprechbuch.exe` oder Datei ins Fenster ziehen.
+- Die Dateiverknüpfung für `.hbook` richten erst die Installer ein; mit den Installern selbst ist
+  sie noch nicht ausprobiert, nur „Öffnen mit“ auf die `sprechbuch.exe` und Hineinziehen.
+- Die macOS- und Linux-Pakete baut GitHub Actions; auf echten Geräten sind sie noch nicht getestet.
+  macOS: nur ad hoc signiert, nicht notarisiert.
 - Der macOS-Weg (`RunEvent::Opened`) ist geschrieben, aber mangels Mac noch nicht ausprobiert.
 - Zusammenführen kennt keine Zeichen-genauen Konflikte: Haben beide Seiten dieselbe Rede
   unterschiedlich zugeordnet, gewinnt die eigene Entscheidung ohne Rückfrage.
