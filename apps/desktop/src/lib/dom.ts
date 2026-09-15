@@ -36,6 +36,24 @@ export function rangeFor(root: ParentNode, block: string, start: number, end: nu
   return range;
 }
 
+/**
+ * Seitenmodus (Spalten): Passt eine Randnotiz nicht mehr unter ihre Zeile, schiebt der Browser sie
+ * auf die nächste Seite – zu spät, um vorzuwarnen. Solche Notizen enden stattdessen auf Höhe ihrer Zeile.
+ */
+export function fitMarginNotes(root: ParentNode, lineHeight: number): void {
+  const notes = [...root.querySelectorAll<HTMLElement>(".mnote")];
+  for (const n of notes) n.style.removeProperty("margin-block");
+  for (const n of notes) {
+    let anchor = n.nextElementSibling;
+    while (anchor && !anchor.hasAttribute("data-start")) anchor = anchor.nextElementSibling;
+    const line = anchor?.getClientRects()[0];
+    const box = n.getBoundingClientRect();
+    // In derselben Spalte steht die Notiz immer links vom Text
+    if (!line || box.left <= line.left) continue;
+    n.style.setProperty("margin-block", `${Math.min(0, lineHeight - box.height)}px 0px`);
+  }
+}
+
 const canHighlight = () => typeof Highlight !== "undefined" && typeof CSS !== "undefined" && "highlights" in CSS;
 
 /** CSS Custom Highlight setzen – markiert Text, ohne das DOM anzufassen. */

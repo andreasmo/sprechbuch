@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Annotation } from "@sprechbuch/core";
   import { onDestroy, onMount, tick } from "svelte";
+  import { fitMarginNotes } from "../dom";
   import { findSpeechSentence } from "../find";
   import { duration, fmt, isTyping } from "../labels";
   import { chapterCast, chapterSentences, type SentenceRef } from "../render";
@@ -113,6 +114,7 @@
     await tick();
     const tv = textEl();
     if (!tv) return;
+    fitMarginNotes(tv, settings.fontSize * settings.lineHeight);
     const last = tv.lastElementChild?.getClientRects();
     const right = last?.length ? last[last.length - 1]!.right - tv.getBoundingClientRect().left : 0;
     const extent = Math.max(tv.scrollWidth, right);
@@ -150,7 +152,11 @@
     void [settings.paged, settings.fontSize, settings.lineHeight, settings.columnWidth, settings.font, settings.wordSpacing,
       settings.pipes, settings.badges, settings.breath, settings.numbers, settings.speech, settings.legend, settings.preview,
       chapter, session.book, session.isolate];
-    if (!settings.paged) return;
+    if (!settings.paged) {
+      // Anpassungen der Randnotizen aus dem Seitenmodus zurücknehmen
+      void tick().then(() => { const tv = textEl(); if (tv) fitMarginNotes(tv, 0); });
+      return;
+    }
     stopAuto();
     window.scrollTo({ top: 0 });
     void tick().then(measure);

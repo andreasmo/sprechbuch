@@ -180,6 +180,11 @@
     };
   });
 
+  /** Notizen stehen links neben dem Text – beim Lesen aus dem Augenwinkel sichtbar. Platz dafür nur, wenn es welche gibt. */
+  const marginNotes = $derived(
+    mode !== "review" && blocks.some((b) => (session.lookup.byBlock.get(b.id) ?? []).some((a) => a.type === "note")),
+  );
+
   const isCur = (block: string, s: number | null) => s !== null && current?.block === block && current.sentence === s;
   const icon = (t: "retake" | "note" | "bookmark") => (t === "retake" ? "⟲" : t === "note" ? "✎" : "★");
 </script>
@@ -197,7 +202,8 @@
         >{p.mark === "breath" ? "✓" : p.long ? "//" : "/"}</span
       >
     {:else}
-      {#each p.starts ?? [] as s (s.id)}<span class="icon {s.type}" data-icon-at={p.start} title={s.text ?? ""}>{icon(s.type)}</span>{/each}<span
+      {#if marginNotes}{#each p.starts ?? [] as s (s.id)}{#if s.type === "note"}<span class="mnote" data-icon-at={p.start} title={s.text}>{s.text}</span
+          >{/if}{/each}{/if}{#each p.starts ?? [] as s (s.id)}<span class="icon {s.type}" data-icon-at={p.start} title={s.text ?? ""}>{icon(s.type)}</span>{/each}<span
         data-start={p.start}
         data-end={p.end}
         class="t"
@@ -231,6 +237,7 @@
   class:focus-mode={mode === "record" && settings.focus}
   class:numbers={settings.numbers && mode !== "review"}
   class:warn-long={settings.warnLong}
+  class:margin-notes={marginNotes}
   style="--fs: {settings.fontSize}px; --lh: {settings.lineHeight}; --colw: {settings.columnWidth}rem; --ws: {settings.wordSpacing}em; --read-font: {FONT_STACK[settings.font]}"
   bind:this={root}
   onclick={onClick}
@@ -291,7 +298,10 @@
   [data-mode="record"] .s { cursor: pointer; border-radius: 0.2em; }
   .s.cur { background: var(--cur); outline: 0.12em solid var(--curline); outline-offset: 0.12em; }
   .s.read { opacity: 0.5; }
-  .focus-mode .s:not(.cur) { opacity: 0.3; }
+  /* Fokus dimmt nur den Text – Notizen zu kommenden Sätzen sollen weiter warnen */
+  .focus-mode .s:not(.cur) { opacity: 1; }
+  .focus-mode .s:not(.cur) > :not(.mnote), .focus-mode .s:not(.cur)::before { opacity: 0.3; }
+  .focus-mode .s.read > .mnote { opacity: 0.5; }
   .numbers .s::before {
     content: attr(data-n);
     font: 600 0.52em/1 var(--ui);
@@ -308,10 +318,50 @@
   .bd { font-weight: 700; }
   .emph { text-decoration: underline; text-decoration-thickness: 0.12em; text-underline-offset: 0.18em; font-weight: 600; }
   .retake { text-decoration: underline wavy var(--danger); text-decoration-thickness: 1px; text-underline-offset: 0.3em; }
-  .note { border-bottom: 1px dotted var(--accent); }
+  .note { border-bottom: 1px dotted var(--note); }
   .icon { font: 700 0.62em/1 var(--ui); vertical-align: 0.5em; margin: 0 0.15em; cursor: pointer; user-select: none; }
   .icon.retake { color: var(--danger); text-decoration: none; }
-  .icon.note { color: var(--accent); }
+  .icon.note { color: var(--note); }
+
+  /* Randnotizen (wie Marginalien): schwebend links neben der Zeile, in der die Notiz beginnt.
+     clear stapelt dicht aufeinanderfolgende Notizen untereinander; die Blöcke rücken dafür nach rechts. */
+  .textview { --note: var(--warn); --note-w: calc(var(--fs) * 7.4); --note-gap: calc(var(--fs) * 0.8); }
+  .margin-notes { max-width: calc(var(--colw) + var(--note-w)); }
+  .margin-notes > * { margin-left: var(--note-w); }
+  .margin-notes > p.quote { margin-left: calc(var(--note-w) + 1.4em); }
+  .mnote {
+    float: left;
+    clear: left;
+    width: calc(var(--note-w) - var(--note-gap));
+    margin: calc(var(--fs) * 0.3) var(--note-gap) calc(var(--fs) * 0.35) calc(-1 * var(--note-w));
+    padding: 0.28em 0.5em 0.32em 0.55em;
+    font: 600 max(12px, calc(var(--fs) * 0.64)) / 1.32 var(--ui);
+    font-style: normal;
+    letter-spacing: normal;
+    word-spacing: normal;
+    white-space: normal;
+    text-align: left;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    color: var(--fg);
+    background: color-mix(in srgb, var(--note) 15%, var(--panel));
+    border-left: 3px solid var(--note);
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
+    overflow: hidden;
+  }
+  .quote .mnote { margin-left: calc(-1 * (var(--note-w) + var(--fs) * 2.2) - 2px); }
+  [data-mode="edit"] .mnote:hover { background: color-mix(in srgb, var(--note) 26%, var(--panel)); }
+  @media (max-width: 600px) {
+    .textview { --note-w: calc(var(--fs) * 5); --note-gap: calc(var(--fs) * 0.5); }
+  }
   .icon.bookmark { color: var(--warn); }
   .pt { font: 700 0.8em/1 var(--ui); color: var(--accent); margin: 0 0.12em; cursor: pointer; user-select: none; }
   .pt.long { letter-spacing: -0.1em; }
