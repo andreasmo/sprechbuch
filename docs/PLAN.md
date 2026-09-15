@@ -343,6 +343,15 @@ Beispielkapitel ist mit lokaler KI den Figuren zugeordnet.
 Fokus-Modus, beim Bearbeiten (Antippen öffnet die Notiz), als iPad hochkant, Handy und im dunklen
 Thema; die lokal gebaute Release-App (WebView2) mit Beispiel und Notiz; der Windows-Installer baut.
 
+## Version 0.1.1
+
+Korrekturen nach dem ersten Test auf dem iPad: Menüs, die weder unter noch über den Tippunkt passen,
+liegen vollständig im Fenster, statt mit unsichtbarer Scrollleiste abgeschnitten zu wirken; beim
+Antippen einer Rede stehen „Stimmt“, „Ab hier andere Figur“ und „Keine Rede“ vor der Figurenliste.
+Die automatische Sicherung öffnet die Verbindung zum App-Speicher neu, wenn Safari sie nach einem
+Tab-Wechsel getrennt hat, und meldet sonst den echten Grund statt „null“ (geprüft mit simuliert
+getrennter Verbindung und abgebrochener Transaktion; auf dem echten iPad noch zu bestätigen).
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz

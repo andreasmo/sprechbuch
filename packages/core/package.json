@@ -1,6 +1,6 @@
 {
   "name": "@sprechbuch/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Import, Analyse und Buchformat (.hbook) von Sprechbuch – läuft im Browser, Web Worker und Node",
   "license": "MIT",
   "type": "module",
