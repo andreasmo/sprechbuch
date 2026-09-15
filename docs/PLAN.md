@@ -16,7 +16,7 @@ Stand: 14.09.2026
 | Speicherort Entwicklung | außerhalb synchronisierter Cloud-Ordner (Rust-Build und node_modules) |
 | Plattformen | Desktop für Windows, macOS und Linux; auf dem iPad (und in jedem aktuellen Browser) die Web-App zum Lesen, Aufnehmen und für Markierungen, Sprecher und Notizen – keine Änderungen am Buchtext, kein Import, keine KI |
 | Vertraulichkeit | Unveröffentlichte Bücher sind vertraulich. **Nur lokale KI** ist Standard; Cloud-KI muss auf dem Gerät ausdrücklich erlaubt werden (Rust sperrt sonst jede nicht lokale Adresse) und zusätzlich pro Buch |
-| Hosting | vorerst nichts gehostet – die App läuft lokal, `.hbook`-Dateien kommen z. B. per Dropbox aufs iPad |
+| Hosting | Bücher werden nie gehostet. Die **Lese-App** (nur Code) liegt auf GitHub Pages, damit sie aufs iPad kommt; `.hbook`-Dateien kommen per Dropbox o. ä. |
 | Repository | öffentlich auf GitHub; macOS- und Linux-Builds über GitHub Actions (kein Mac vorhanden) |
 | Testgeräte | Windows 11 (Ryzen AI 7 PRO 350, 92 GB, ohne dedizierte GPU), iPad mit iPadOS 26.6.2 |
 
@@ -29,7 +29,7 @@ Stand: 14.09.2026
 | **3 – Desktop** | atomares Speichern (Vorschlag neben der Quelle), automatisches Speichern in die Datei, Erkennung fremder Änderungen (Cloud-Sync) mit **Zusammenführen**, `.hbook`-Dateiverknüpfung, Öffnen per Doppelklick/„Öffnen mit“/Drag & Drop, eine Instanz, Nachfrage beim Schließen | **erledigt** |
 | **4 – KI** | Anbieter-Adapter (Anthropic, OpenAI-kompatibel inkl. lokaler Modelle), Schlüssel im OS-Tresor mit Rust-Proxy, Kostenvorschau, Verfeinerung unsicherer Zuordnungen, Figuren zusammenführen, Aussprachevorschläge; Qualitätsmessung an geprüften Büchern | **erledigt** |
 | **5a – Lokale KI** | eigener Ollama-Adapter mit passendem Kontextfenster, Abschnitte nach Kontextgröße, Zeitschätzung aus gemessener Geschwindigkeit, echtes Abbrechen, Fortsetzen; „Nur lokale KI“ als Standard mit Sperre in Rust; Test mit echten lokalen Modellen | **erledigt** (Qualitätsmessung an einem geprüften Kapitel offen) |
-| **5b – iPad/Web** | Touch-Bedienung, offline nutzbar, Bildschirm bleibt an, `.hbook` hin und zurück (Dateien-App/Dropbox) mit Zusammenführen auf dem Desktop | offen |
+| **5b – iPad/Web** | Lese-App (ohne Import/KI) für GitHub Pages: offline, Touch-Bedienung, Bildschirm bleibt an, `.hbook` hin und zurück (Teilen → Dateien/Dropbox) mit Übergabe-Protokoll, das die Desktop-App auf ihren Stand überträgt | **erledigt** (Test auf dem echten iPad offen) |
 | **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions; Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | offen |
 | **5d – Veröffentlichung** | öffentliches Repository, Release-Seite, abschaltbarer Update-Hinweis | offen |
 
@@ -277,6 +277,55 @@ vorbei, native Rückfrage abgelehnt/bestätigt, zurück ohne Rückfrage), echtes
 Rust-Proxy (Modellliste, Verbindungstest mit Messung), Phase-4-Ablauf mit Anthropic-Protokoll
 (21 Prüfungen) sowie Speichern/Sync und Neustart ohne Rückschritte. Web-Version im Browser: Sperre,
 gesperrte Vorlagen, Modellliste direkt vom lokalen Ollama.
+
+## Ergebnis Phase 5b
+
+**Lese-App** (`npm run build:web` → `apps/desktop/dist-web`, veröffentlicht über
+`.github/workflows/pages.yml`):
+
+- Dieselbe App, gebaut mit `VITE_EDITION=lesen`: öffnet nur `.hbook`, kein Import, keine KI.
+  Übersicht, Bearbeiten (Sprecher, Markierungen, Notizen, Pausen – nie der Buchtext), Prüfen und
+  Aufnehmen wie auf dem Desktop.
+- **Nichts nach außen:** strenge Content Security Policy in der Seite (`connect-src 'self'`) –
+  technisch kann sie keine Daten an andere Adressen schicken. Bücher liegen nur in IndexedDB des
+  Geräts; `navigator.storage.persist()` wird angefragt.
+- **Offline:** Service Worker legt alle App-Dateien vorab in den Cache (pdf.js ausgenommen, das nur
+  der Import braucht – im Worker jetzt erst bei Bedarf geladen). Eine neue Version wartet und wird
+  erst über „Jetzt neu laden“ auf der Startseite aktiv – nie mitten in der Aufnahme. Relative Pfade:
+  läuft unter jedem Pfad, z. B. `https://<name>.github.io/sprechbuch/`.
+- **Installierbar:** Manifest, Symbole; auf dem iPad Hinweis „Teilen → Zum Home-Bildschirm“ (dann
+  keine Löschung nach Tagen ohne Besuch).
+- **Datei hin und zurück:** Öffnen über die Dateien-App (auf iPadOS ohne Dateifilter, der „.hbook“
+  sonst ausgraut). „Sichern …“ öffnet auf Touch-Geräten das Teilen-Menü („In Dateien sichern“,
+  Dropbox), sonst Download. Die Datei wird im Hintergrund vorbereitet, weil Safari das Teilen-Menü nur
+  direkt nach dem Tippen erlaubt; dauert es doch zu lange, genügt ein zweites Tippen.
+
+**Übergabe-Protokoll** (`changes.json`, siehe [Buchformat](bookfile-format.md)): Die Lese-App legt
+jeder gesicherten Datei ihre Befehle seit der Ausgangsfassung bei. Die Desktop-App überträgt sie auf
+ihren eigenen Stand, statt ihn zu ersetzen – egal ob die Datei im Cloud-Ordner ersetzt wurde (auch
+bei geöffnetem Buch) oder als Kopie „Buch 2.hbook“ ankommt (dann mit Rückfrage). Nebenbei behoben:
+Beim Zusammenführen galten zwei *verschiedene* Notizen am selben Satz als dieselbe.
+
+**Touch:** fingergroße Bedienflächen, keine Tastenkürzel-Hinweise, kein Doppeltipp-Zoom; Aufnehmen
+mit Wischen (Seitenmodus blättert, sonst Satz vor/zurück) und großen Transportknöpfen; Bearbeiten
+per Antippen (Pause, Atem, Satz teilen ohne Alt-Taste) und lange drücken zum Markieren (Menü unter
+der Auswahl, weil iOS darüber sein eigenes zeigt); Sicherheitsabstände für Home-Balken und
+Querformat. **Bildschirm bleibt an** im Aufnahmemodus (Screen Wake Lock, auch auf dem Desktop).
+SHA-256 funktioniert auch ohne Web Crypto (Test auf dem Tablet über http im lokalen Netz).
+
+**Geprüft:** Kern-Tests (Übergabe-Protokoll lesen/schreiben/beschädigt, SHA-256 ohne Web Crypto,
+Notizen beim Zusammenführen), App-Tests (Entscheidung beim Eintreffen, Pfade, Gerätename) – im
+Browser als Tablet (744 × 1133, Touch): Lese-Ausgabe ohne KI, Kopfzeile passt, Wischen im Scroll-
+und Seitenmodus, Retake/Marker, gesicherte Datei enthält das Protokoll mit gleicher Ausgangsfassung
+und wachsenden Befehlen, Antippen- und Markier-Menü, Update-Hinweis mit Neuladen, **Start und
+Weiterlesen ohne Server** aus dem Cache – und in der echten Desktop-App (14 Prüfungen): Desktop
+arbeitet weiter, iPad ersetzt die Datei mit altem Stand → beides steht in der Datei, Protokoll
+entfernt; iPad-Fassung auf aktuellem Stand wird still geladen; Kopie „Strom 2.hbook“ → native
+Rückfrage → in „Strom.hbook“ übernommen, Kopie unverändert. Speichern/Sync, Neustart, Reader und
+KI-Ablauf ohne Rückschritte.
+
+**Nicht geprüft:** echtes iPad (Safari/WebKit, Teilen-Menü, „In Dateien sichern“ in Dropbox,
+Home-Bildschirm-App, Wake Lock) – das geht erst mit der veröffentlichten Seite.
 
 ## Bekannte Grenzen
 

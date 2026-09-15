@@ -7,10 +7,10 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Phase 5a (lokale KI).** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus,
-> sicheres Speichern mit Cloud-Sync-Abgleich und optionale KI-Unterstützung – bevorzugt mit einem
-> Modell auf dem eigenen Rechner – sind fertig und getestet. Als Nächstes: iPad/Web, Installer für
-> Windows, macOS und Linux – siehe [docs/PLAN.md](docs/PLAN.md).
+> **Status: Phase 5b (Lese-App fürs iPad).** Import, Analyse, Buchformat, Bearbeiten, Prüfen,
+> Aufnahmemodus, sicheres Speichern mit Cloud-Sync-Abgleich, KI-Unterstützung (bevorzugt lokal) und
+> die Lese-App für Tablet und Browser sind fertig und getestet. Als Nächstes: Installer für Windows,
+> macOS und Linux und die Veröffentlichung – siehe [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
 
@@ -54,6 +54,17 @@ getroffene Entscheidungen überschreibt keine automatische Analyse.
 - `.hbook`-Dateien öffnen per Doppelklick, „Öffnen mit“ oder Hineinziehen; eine bereits laufende
   App übernimmt die Datei.
 
+**Lese-App für iPad und Browser**
+
+- Zum Einsprechen am Tablet: dieselbe Oberfläche mit Übersicht, Bearbeiten (Sprecher, Retakes,
+  Notizen, Pausen), Prüfen und Aufnehmen – ohne Import und KI. Läuft offline, lässt sich auf den
+  Home-Bildschirm legen, der Bildschirm bleibt beim Aufnehmen an; Wischen blättert.
+- `.hbook` aus Dropbox/iCloud Drive öffnen, mit **„Sichern …“** über das Teilen-Menü zurücklegen.
+  Die Desktop-App übernimmt die Änderungen – auch wenn dort inzwischen weitergearbeitet wurde, und
+  auch wenn die Datei als Kopie „Buch 2.hbook“ zurückkommt.
+- Auf der Seite liegt nur der Code der App, nie ein Buch. Sie darf technisch nichts nach außen
+  senden (Content Security Policy).
+
 **KI – optional, standardmäßig nur lokal**
 
 - **Nur lokale KI** ist voreingestellt: Unveröffentlichte Bücher sind vertraulich, deshalb geht
@@ -84,7 +95,7 @@ nebenbei oder über Nacht. Die App misst das beim Verbindungstest und zeigt die 
 ```
 packages/core     Import, Analyse, Buchformat, Bearbeitungsbefehle – läuft in Browser, Worker und Node
 packages/cli      Kommandozeile: sprechbuch import | info | validate | export-json | import-json | ai | eval
-apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Tauri als Web-App
+apps/desktop      App: Svelte 5 + Vite; als Desktop-App über Tauri 2, ohne Tauri als Web-App bzw. Lese-App (--mode lesen)
 reference/python  Python-Prototyp als Referenz für Paritätstests
 tools/fake-llm    KI-Attrappe für Entwicklung und Tests (Anthropic-, OpenAI- und Ollama-Protokoll, ohne Kosten)
 docs/             Plan, Buchformat
@@ -103,6 +114,8 @@ npm test                 # alle Tests (Kern + App)
 npm run typecheck        # TypeScript + svelte-check
 npm run desktop          # Desktop-App im Entwicklungsmodus
 npm run dev -w @sprechbuch/desktop   # nur Web-App unter http://localhost:1420
+npm run build:web        # Lese-App (offline, für GitHub Pages) nach apps/desktop/dist-web
+npm run preview:web -w @sprechbuch/desktop   # gebaute Lese-App unter http://localhost:4173
 ```
 
 Kommandozeile:

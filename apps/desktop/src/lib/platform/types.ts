@@ -31,6 +31,17 @@ export class FileConflictError extends Error {
   }
 }
 
+/**
+ * iPad/Safari: Das Teilen-Menü darf nur direkt nach einem Tippen aufgehen. Hat das Packen der Datei zu
+ * lange gedauert, ist die Datei jetzt vorbereitet – ein zweites Tippen öffnet das Menü sofort.
+ */
+export class ShareNeedsTapError extends Error {
+  constructor() {
+    super("Die Datei ist bereit – bitte noch einmal tippen.");
+    this.name = "ShareNeedsTapError";
+  }
+}
+
 /** Die Datei ist nicht mehr da (verschoben, umbenannt, gelöscht). */
 export class FileMissingError extends Error {
   constructor(message = "Die Datei gibt es nicht mehr.") {
@@ -92,15 +103,17 @@ export interface AiBridge {
 export interface Platform {
   readonly kind: "tauri" | "web";
   readonly ai: AiBridge;
-  /** Kann an einen bekannten Pfad zurückschreiben (Desktop) – im Web wird jedes Mal heruntergeladen. */
+  /** Kann an einen bekannten Pfad zurückschreiben (Desktop) – im Web wird jedes Mal heruntergeladen bzw. geteilt. */
   readonly canOverwrite: boolean;
+  /** Web auf Tablet/Telefon: Sichern öffnet das Teilen-Menü (z. B. „In Dateien sichern“, Dropbox) statt herunterzuladen */
+  readonly sharesFiles: boolean;
   /** Nur Desktop */
   readonly files?: DesktopFiles;
   /** Datei auswählen und lesen; null bei Abbruch. */
   pickFile(kind: FileKind): Promise<PickedFile | null>;
   /**
-   * Export speichern (JSON, CSV) bzw. im Web herunterladen. Mit `path` ohne Rückfrage dorthin, sonst Dialog.
-   * Liefert den Pfad (Desktop) bzw. Dateinamen (Web) oder null bei Abbruch.
+   * Export speichern (JSON, CSV) bzw. im Web herunterladen oder teilen. Mit `path` ohne Rückfrage dorthin, sonst Dialog.
+   * Liefert den Pfad (Desktop) bzw. Dateinamen (Web) oder null bei Abbruch. Wirft im Web ggf. ShareNeedsTapError.
    */
   saveFile(bytes: Uint8Array, suggestedName: string, kind: Exclude<FileKind, "any" | "source">, path?: string): Promise<string | null>;
 }

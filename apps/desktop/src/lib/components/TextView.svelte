@@ -17,6 +17,7 @@
 <script lang="ts">
   import type { BookChapter } from "@sprechbuch/core";
   import { rangeFor, setHighlight } from "../dom";
+  import { isTouch } from "../edition";
   import { markVar, strongVar } from "../markers";
   import { breathChunks, LONG_SENTENCE, renderBlock, sentenceNumbers, type Piece, type SpeechInfo, type TextPiece } from "../render";
   import { FONT_STACK, settings } from "../store/settings.svelte";
@@ -134,25 +135,50 @@
     if (hit) onText?.({ ...hit, x: ev.clientX, y: ev.clientY }, ev.altKey);
   }
 
+  /** Aktuelle Textauswahl melden. `below`: Menü unter der Auswahl – darüber zeigt iOS sein eigenes Menü */
+  function reportSelection(below: boolean) {
+    if (!onSelect) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount || !root.contains(sel.anchorNode)) {
+      onSelect(null);
+      return;
+    }
+    const a = hitFromNode(sel.anchorNode, sel.anchorOffset);
+    const b = hitFromNode(sel.focusNode, sel.focusOffset);
+    if (!a || !b || a.block !== b.block) {
+      onSelect(null);
+      return;
+    }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    onSelect({
+      block: a.block, start: Math.min(a.offset, b.offset), end: Math.max(a.offset, b.offset),
+      x: rect.left + rect.width / 2, y: below ? rect.bottom + 12 : rect.top,
+    });
+  }
+
   function onMouseUp() {
     if (mode !== "edit" || !onSelect) return;
     // Auswahl erst nach dem Browser-Update auswerten
-    setTimeout(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount || !root.contains(sel.anchorNode)) {
-        onSelect(null);
-        return;
-      }
-      const a = hitFromNode(sel.anchorNode, sel.anchorOffset);
-      const b = hitFromNode(sel.focusNode, sel.focusOffset);
-      if (!a || !b || a.block !== b.block) {
-        onSelect(null);
-        return;
-      }
-      const rect = sel.getRangeAt(0).getBoundingClientRect();
-      onSelect({ block: a.block, start: Math.min(a.offset, b.offset), end: Math.max(a.offset, b.offset), x: rect.left + rect.width / 2, y: rect.top });
-    }, 0);
+    setTimeout(() => reportSelection(false), 0);
   }
+
+  // Finger: Markieren geht per langem Druck und Ziehen der Griffe – ohne mouseup. Erst melden, wenn die Auswahl ruht.
+  $effect(() => {
+    if (mode !== "edit" || !onSelect || !isTouch()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && root.contains(sel.anchorNode)) reportSelection(true);
+      }, 650);
+    };
+    document.addEventListener("selectionchange", onChange);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("selectionchange", onChange);
+    };
+  });
 
   const isCur = (block: string, s: number | null) => s !== null && current?.block === block && current.sentence === s;
   const icon = (t: "retake" | "note" | "bookmark") => (t === "retake" ? "⟲" : t === "note" ? "✎" : "★");

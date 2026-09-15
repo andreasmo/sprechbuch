@@ -19,6 +19,7 @@ jobs:
       - run: npm test
       - run: npm run build:cli
       - run: npm run build -w @sprechbuch/desktop
+      - run: npm run build:web
 
   desktop-rust:
     runs-on: ubuntu-latest

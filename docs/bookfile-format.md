@@ -15,6 +15,7 @@ automatisch aktualisiert.
 | `mimetype` | `application/vnd.sprechbuch.book+zip` – **erster Eintrag, unkomprimiert** (erlaubt Erkennung ohne Entpacken) |
 | `book.json` | das Buch (dieses Dokument) |
 | `source/<Dateiname>` | optional die Originaldatei (EPUB/PDF), um später neu analysieren zu können |
+| `changes.json` | optional das **Übergabe-Protokoll** eines Geräts ohne Dateizugriff (iPad, Browser) – unkomprimiert, siehe unten |
 
 Zusätzlich lässt sich `book.json` einzeln exportieren und wieder importieren
 (`sprechbuch export-json`, `sprechbuch import-json`).
@@ -152,6 +153,39 @@ Beim Lesen wird geprüft:
 - dass jede Markierung auf einen existierenden Block verweist und innerhalb seines Textes liegt,
 - dass `speech.speaker` auf eine existierende Figur verweist,
 - dass Satzgrenzen innerhalb des Blocktextes liegen.
+
+## Übergabe-Protokoll (`changes.json`)
+
+Die Lese-App im Browser bzw. auf dem iPad kann eine Datei nicht an ihren Platz zurückschreiben –
+sie gibt eine neue `.hbook` über „Teilen“ bzw. als Download zurück. Dabei kann sie nicht prüfen, ob
+die Datei inzwischen auf dem Desktop weiterbearbeitet wurde. Deshalb legt sie ihre Änderungen als
+Befehle bei:
+
+```jsonc
+{
+  "format": "sprechbuch-changes",
+  "version": 1,
+  "base": "9dcee62e…",          // SHA-256 der .hbook, von der das Gerät ausging
+  "device": "iPad",
+  "updatedAt": "2026-09-15T08:00:00.000Z",
+  "edits": [                    // alle Befehle seit `base`, in Reihenfolge; null = nicht lückenlos
+    { "edit": { "type": "addMark", "mark": { "type": "retake", "block": "b00009", "start": 0, "end": 69 } }, "created": "a001153" }
+  ]
+}
+```
+
+- `book.json` enthält den Stand des Geräts **mit** diesen Änderungen; `changes.json` sagt, wie er
+  entstanden ist. Gibt das Gerät mehrmals zurück, bleibt `base` gleich und `edits` wächst.
+- **Desktop-App**, wenn eine solche Datei eintrifft (die eigene Datei wurde ersetzt, oder eine Kopie
+  wie „Buch 2.hbook“ wird geöffnet):
+  - `base` ist genau der eigene Stand und hier ist nichts offen → Datei laden.
+  - sonst → die Befehle auf den eigenen, neueren Stand übertragen (wie beim Zusammenführen in
+    Phase 3) und speichern. Bei einer Kopie fragt die App vorher, ob sie in die eigentliche Datei
+    übernehmen soll.
+  - `edits: null` → die App fragt, welche Fassung gilt.
+- Die Desktop-App schreibt nie ein Übergabe-Protokoll; nach dem Übernehmen steht es nicht mehr in der Datei.
+- Befehle sind dieselben wie in der Rückgängig-Historie ([`edits.ts`](../packages/core/src/edit/edits.ts)).
+  Ein beschädigtes oder unbekanntes Protokoll macht die Datei nicht unlesbar – es wird ignoriert.
 
 ## Versionen und Migration
 

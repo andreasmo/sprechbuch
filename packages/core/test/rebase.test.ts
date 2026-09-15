@@ -83,4 +83,16 @@ describe("rebaseEdits", () => {
     expect(res.skipped).toEqual([{ edit: mine.journal[1]!.edit, label: "Sprecher geändert", reason: "Unbekannte Markierung: a000004" }]);
     expect(res.book).toBe(theirs);
   });
+
+  it("verschiedene Notizen am selben Satz gehen beide nicht verloren", async () => {
+    const { book: base } = await sampleBook();
+    const block = base.chapters[0]!.blocks[2]!.id;
+    const note = (text: string): Edit => ({ type: "addMark", mark: { type: "note", block, start: 0, end: 16, text } });
+    const theirs = run(base, [note("leiser")]).book;
+    const mine = run(base, [note("leiser"), note("Tempo raus")]);
+    const res = rebaseEdits(theirs, mine.journal, NOW);
+    expect(res.unchanged).toHaveLength(1);
+    expect(res.applied).toHaveLength(1);
+    expect(res.book.annotations.filter((a) => a.type === "note").map((a) => (a as { text: string }).text).sort()).toEqual(["Tempo raus", "leiser"]);
+  });
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { endOf, startOf, type Annotation } from "@sprechbuch/core";
+  import { isTouch } from "../edition";
   import { MARK_LABEL, viaLabel } from "../labels";
   import { snapSelection } from "../render";
   import type { BookSession } from "../store/session.svelte";
@@ -37,9 +38,12 @@
   }
 
   function onText(hit: TextHit, alt: boolean) {
-    if (alt || covering(hit).length) pop = { kind: "text", hit, alt };
+    // Ohne Alt-Taste (Finger): Pause, Atem und Satz teilen gibt es beim Antippen jeder Stelle
+    const here = alt || isTouch();
+    if (here || covering(hit).length) pop = { kind: "text", hit, alt: here };
     else pop = null;
   }
+  const touch = isTouch();
 
   function onSelect(sel: TextSelection | null) {
     const text = sel ? session.lookup.blocks.get(sel.block)?.block.text : undefined;
@@ -77,8 +81,13 @@
     <Legend {session} {chapter} limit={10} />
   </div>
   <p class="hint muted small">
-    <strong>Rede anklicken</strong>: Sprecher ändern · <strong>Text markieren</strong>: Rede, Betonung, Notiz, Retake ·
-    <kbd>Alt</kbd>+Klick: Satz teilen, Pause, Atem · <strong>|</strong> anklicken: Sätze verbinden
+    {#if touch}
+      <strong>Stelle antippen</strong>: Sprecher ändern, Pause, Atem, Satz teilen · <strong>Lange drücken und markieren</strong>: Rede,
+      Betonung, Notiz, Retake · <strong>|</strong> antippen: Sätze verbinden
+    {:else}
+      <strong>Rede anklicken</strong>: Sprecher ändern · <strong>Text markieren</strong>: Rede, Betonung, Notiz, Retake ·
+      <kbd>Alt</kbd>+Klick: Satz teilen, Pause, Atem · <strong>|</strong> anklicken: Sätze verbinden
+    {/if}
   </p>
 
   <div class="page panel">

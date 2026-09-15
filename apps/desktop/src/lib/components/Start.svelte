@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { isAppleMobile, isStandalone, LESE_APP } from "../edition";
   import { readBrowserFile, type PickedFile } from "../platform";
+  import { appUpdate, applyUpdate } from "../pwa.svelte";
   import { deleteBook, listRecent, type RecentEntry } from "../store/persist";
 
   let { onPick, onDrop, onOpenRecent, ready, dragOver = false }: {
@@ -37,17 +39,42 @@
   }
 
   const when = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+  // Safari löscht Website-Daten nach einiger Zeit ohne Besuch – als App vom Home-Bildschirm nicht
+  const installHint = LESE_APP && isAppleMobile() && !isStandalone();
 </script>
 
 <section class="start">
+  {#if appUpdate.ready}
+    <div class="update panel small" role="status">
+      Eine neue Version ist bereit.
+      <button class="primary small" onclick={applyUpdate}>Jetzt neu laden</button>
+    </div>
+  {/if}
+
   <div class="intro">
-    <h1>Bücher so aufbereiten, dass man sie laut lesen kann.</h1>
-    <p class="muted">
-      Sprechbuch erkennt Sätze und direkte Rede, ordnet jede Rede einer Figur zu und markiert sie mit einer eigenen
-      Textmarker-Farbe. Du prüfst, korrigierst und liest direkt daraus ein. Gespeichert wird alles in einer
-      <strong>.hbook</strong>-Datei.
-    </p>
+    {#if LESE_APP}
+      <h1>Sprechbuch zum Lesen und Einsprechen.</h1>
+      <p class="muted">
+        Öffne eine <strong>.hbook</strong>-Datei aus der Sprechbuch-App – etwa aus Dropbox oder iCloud Drive. Lesen, aufnehmen,
+        Retakes, Notizen und Sprecher korrigieren geht hier; mit „Sichern“ gibst du die Datei zurück, die Desktop-App übernimmt
+        deine Änderungen.
+      </p>
+    {:else}
+      <h1>Bücher so aufbereiten, dass man sie laut lesen kann.</h1>
+      <p class="muted">
+        Sprechbuch erkennt Sätze und direkte Rede, ordnet jede Rede einer Figur zu und markiert sie mit einer eigenen
+        Textmarker-Farbe. Du prüfst, korrigierst und liest direkt daraus ein. Gespeichert wird alles in einer
+        <strong>.hbook</strong>-Datei.
+      </p>
+    {/if}
   </div>
+
+  {#if installHint}
+    <p class="install panel small">
+      <strong>Tipp:</strong> Über <span aria-hidden="true">⎙</span> „Teilen“ → „Zum Home-Bildschirm“ wird Sprechbuch zur App: Sie startet
+      ohne Browserleiste, funktioniert ohne Internet, und Safari löscht deine Bücher nicht nach einigen Tagen ohne Besuch.
+    </p>
+  {/if}
 
   <div
     class="drop panel"
@@ -59,11 +86,15 @@
     ondrop={drop}
   >
     <div class="big" aria-hidden="true">📖</div>
-    <p><strong>EPUB, PDF oder .hbook hierher ziehen</strong></p>
+    <p><strong>{LESE_APP ? ".hbook-Datei hierher ziehen" : "EPUB, PDF oder .hbook hierher ziehen"}</strong></p>
     <div class="actions">
-      <button class="primary" disabled={!ready} onclick={onPick}>Datei öffnen …</button>
+      <button class="primary" disabled={!ready} onclick={onPick}>{LESE_APP ? "Sprechbuch-Datei öffnen …" : "Datei öffnen …"}</button>
     </div>
-    <p class="muted small">Word-Dateien folgen. Alles bleibt auf deinem Rechner – es wird nichts hochgeladen.</p>
+    <p class="muted small">
+      {LESE_APP
+        ? "Das Buch bleibt auf diesem Gerät – es wird nichts hochgeladen, die Seite kann technisch nichts nach außen senden."
+        : "Word-Dateien folgen. Alles bleibt auf deinem Rechner – es wird nichts hochgeladen."}
+    </p>
   </div>
 
   {#if recent.length}
@@ -78,7 +109,7 @@
                 {r.author ? `${r.author} · ` : ""}{when(r.updatedAt)}{r.progress ? ` · gelesen bis ${r.progress} %` : ""}
               </span>
               <span class="small file">
-                {#if r.dirty}<span class="unsaved">● nicht als .hbook gespeichert</span>{:else if r.savedPath}<span class="muted">{r.savedPath}</span>{/if}
+                {#if r.dirty}<span class="unsaved">● {LESE_APP ? "Änderungen noch nicht gesichert" : "nicht als .hbook gespeichert"}</span>{:else if r.savedPath}<span class="muted">{r.savedPath}</span>{/if}
               </span>
             </button>
             <button class="ghost forget" title="Aus der Liste entfernen (die .hbook-Datei bleibt erhalten)" aria-label="Aus der Liste entfernen" onclick={() => forget(r.id)}>✕</button>
@@ -110,4 +141,6 @@
   .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .unsaved { color: var(--warn); }
   .forget { padding: 0 0.9rem; color: var(--muted); border-radius: 0 var(--radius) var(--radius) 0; }
+  .install { margin: 0; padding: 0.7rem 0.9rem; box-shadow: none; background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+  .update { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.5rem 0.8rem; box-shadow: none; }
 </style>

@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --threshold error",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:web": "vite build --mode lesen",
+    "preview:web": "vite preview --mode lesen --outDir dist-web --port 4173"
   },
   "dependencies": {
     "@sprechbuch/core": "*",

@@ -53,11 +53,15 @@ export function remapEdit(edit: Edit, ann: IdMap, cast: IdMap): Edit {
   }
 }
 
-/** Gibt es genau diese Markierung schon? Dann ist ihr Setzen erledigt. */
+/**
+ * Gibt es genau diese Markierung schon? Dann ist ihr Setzen erledigt. Notizen zählen nur mit
+ * gleichem Text als dieselbe – zwei Geräte können an denselben Satz Verschiedenes schreiben.
+ */
 function existingMark(book: Book, m: MarkInput): string | undefined {
   return book.annotations.find((a) => {
     if (a.type !== m.type || a.block !== m.block) return false;
     if ("at" in m) return "at" in a && a.at === m.at;
+    if (m.type === "note" && (a.type !== "note" || a.text !== m.text)) return false;
     return "start" in a && a.start === m.start && a.end === m.end;
   })?.id;
 }

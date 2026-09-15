@@ -140,6 +140,7 @@ const files: DesktopFiles = {
 export const tauriPlatform: Platform = {
   kind: "tauri",
   canOverwrite: true,
+  sharesFiles: false,
   files,
   ai,
 

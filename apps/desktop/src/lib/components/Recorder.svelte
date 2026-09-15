@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "@sprechbuch/core";
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { findSpeechSentence } from "../find";
   import { duration, fmt, isTyping } from "../labels";
   import { chapterCast, chapterSentences, type SentenceRef } from "../render";
@@ -235,6 +235,47 @@
     session.notify(`Tempo auf ${settings.wpm} Wörter pro Minute gesetzt`);
   }
 
+  // ---- Bildschirm anlassen ------------------------------------------------- //
+  // Beim Einsprechen fasst niemand das Tablet an – ohne Sperre geht der Bildschirm nach einer Minute aus
+  let wakeLock: WakeLockSentinel | null = null;
+  async function keepAwake() {
+    if (document.visibilityState !== "visible" || !("wakeLock" in navigator) || (wakeLock && !wakeLock.released)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+    } catch {
+      // z. B. Energiesparmodus – dann eben nicht
+    }
+  }
+  // Die Sperre endet, sobald die Seite verdeckt ist; beim Zurückkehren neu anfordern
+  const onVisibility = () => void keepAwake();
+  onMount(() => {
+    void keepAwake();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      void wakeLock?.release().catch(() => {});
+      wakeLock = null;
+    };
+  });
+
+  // ---- Wischen ------------------------------------------------------------- //
+  // Seitenmodus: nach links wischen blättert vor; Scrollmodus: nächster/voriger Satz
+  let swipe: { x: number; y: number; id: number } | null = null;
+  function onPointerDown(ev: PointerEvent) {
+    if (ev.pointerType === "mouse") return;
+    swipe = { x: ev.clientX, y: ev.clientY, id: ev.pointerId };
+  }
+  function onPointerUp(ev: PointerEvent) {
+    const s = swipe;
+    swipe = null;
+    if (!s || s.id !== ev.pointerId) return;
+    const dx = ev.clientX - s.x;
+    const dy = ev.clientY - s.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+    if (settings.paged) flip(dx < 0 ? 1 : -1);
+    else go(curIndex + (dx < 0 ? 1 : -1));
+  }
+
   function onKey(ev: KeyboardEvent) {
     if (noteOpen || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (isTyping(ev)) return;
@@ -319,6 +360,10 @@
     <div
       class="viewport"
       bind:this={viewport}
+      onpointerdown={onPointerDown}
+      onpointerup={onPointerUp}
+      onpointercancel={() => (swipe = null)}
+      role="presentation"
       style={settings.paged
         ? `--pw: ${layout.pageW}px; --cols: ${layout.cols}; --gap: ${GAP}px; --px: ${-page * layout.cols * (layout.pageW + GAP)}px; height: ${layout.height}px; width: ${layout.cols * layout.pageW + (layout.cols - 1) * GAP}px`
         : undefined}
@@ -403,8 +448,12 @@
 
   footer {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-    border-radius: 0; border-width: 1px 0 0; padding: 0.5rem 1rem 0.6rem;
+    border-radius: 0; border-width: 1px 0 0;
+    padding: 0.5rem max(1rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   }
+  /* Senkrecht scrollen bleibt dem Browser, waagerechtes Wischen gehört dem Blättern */
+  .viewport { touch-action: pan-y pinch-zoom; }
+  .paged .viewport { touch-action: none; }
   .next { max-width: 52rem; margin: 0 auto 0.4rem; display: flex; gap: 0.7rem; align-items: baseline; }
   .next .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); flex: none; }
   .next .text {
@@ -414,5 +463,11 @@
   .transport { max-width: 52rem; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
   .note { display: flex; gap: 0.3rem; }
   .note input { width: 16rem; }
-  @media (max-width: 900px) { .keys { display: none; } }
+  @media (max-width: 900px), (hover: none) and (pointer: coarse) { .keys { display: none; } }
+  /* Finger: Transportknöpfe groß und über die Breite verteilt */
+  @media (pointer: coarse) {
+    .transport button { min-height: 3.2rem; padding: 0.4rem 1rem; font-size: 1rem; }
+    .transport button.primary { flex: 1 1 8rem; }
+    .recorder { padding-bottom: 11rem; }
+  }
 </style>

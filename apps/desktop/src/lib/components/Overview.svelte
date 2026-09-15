@@ -4,6 +4,7 @@
   import { markVar, strongVar } from "../markers";
   import type { MarkRow } from "../marks";
   import type { BookSession } from "../store/session.svelte";
+  import { LESE_APP } from "../edition";
   import AiPanel from "./AiPanel.svelte";
   import MarksList from "./MarksList.svelte";
   import Popover from "./Popover.svelte";
@@ -79,7 +80,7 @@
     </ul>
   </section>
 
-  <AiPanel {session} {onReview} />
+  {#if !LESE_APP}<AiPanel {session} {onReview} />{/if}
 
   <section class="panel card">
     <div class="card-head">

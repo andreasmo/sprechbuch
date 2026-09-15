@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { rangeFor } from "../dom";
+  import { LESE_APP } from "../edition";
   import type { SearchHit } from "../find";
   import { isTyping } from "../labels";
   import type { Platform } from "../platform";
@@ -43,7 +44,10 @@
   // Wurde die Datei von außen geändert (Cloud-Sync, anderes Gerät)? Beim Zurückkehren ins Fenster und regelmäßig prüfen
   const CHECK_MS = 10_000;
   onMount(() => {
-    if (!platform.files) return;
+    // iPad/Safari beendet Seiten im Hintergrund ohne „beforeunload“ – beim Wegwechseln sichern
+    const onHide = () => document.visibilityState === "hidden" && void session.persistNow();
+    document.addEventListener("visibilitychange", onHide);
+    if (!platform.files) return () => document.removeEventListener("visibilitychange", onHide);
     const check = () => void session.checkFile();
     const onVisible = () => document.visibilityState === "visible" && check();
     const timer = setInterval(() => document.visibilityState === "visible" && check(), CHECK_MS);
@@ -53,13 +57,18 @@
       clearInterval(timer);
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onHide);
     };
   });
 
   const status = $derived.by(() => {
     if (session.conflict) return { text: "⚠ Datei geändert", cls: "warn" };
     if (session.saving) return { text: "Speichere …", cls: "" };
-    if (session.dirty) return session.autosaves ? { text: "Wird gespeichert …", cls: "" } : { text: "● Ungespeichert", cls: "warn" };
+    if (session.dirty) {
+      if (session.autosaves) return { text: "Wird gespeichert …", cls: "" };
+      return { text: platform.files ? "● Ungespeichert" : "● Noch nicht gesichert", cls: "warn" };
+    }
+    if (!platform.files) return { text: "Gesichert", cls: "" };
     return session.savedPath ? { text: "Gespeichert", cls: "" } : { text: "Nicht gespeichert", cls: "" };
   });
 
@@ -160,8 +169,9 @@
     <button class="ghost icon" disabled={!session.canUndo} onclick={() => session.undo()} title={session.canUndo ? `Rückgängig: ${session.undoLabel} (Strg+Z)` : "Nichts rückgängig zu machen"} aria-label="Rückgängig">↶</button>
     <button class="ghost icon" disabled={!session.canRedo} onclick={() => session.redo()} title={session.canRedo ? `Wiederholen: ${session.redoLabel} (Strg+Y)` : "Nichts zu wiederholen"} aria-label="Wiederholen">↷</button>
     <span class="state small" class:dirty={status.cls === "warn"} title={session.savedPath ?? ""}>{status.text}</span>
-    <button class="primary" onclick={() => session.save()} disabled={session.saving} title="Speichern (Strg+S)">
-      {session.saving ? "Speichere …" : platform.canOverwrite ? "Speichern" : "Herunterladen"}
+    <button class="primary" onclick={() => session.save()} disabled={session.saving}
+      title={platform.canOverwrite ? "Speichern (Strg+S)" : platform.sharesFiles ? "Datei sichern – z. B. „In Dateien sichern“ oder Dropbox" : "Als .hbook herunterladen (Strg+S)"}>
+      {session.saving ? "Speichere …" : platform.canOverwrite ? "Speichern" : platform.sharesFiles ? "Sichern …" : "Herunterladen"}
     </button>
     <div class="menu">
       <button class="ghost icon" onclick={() => (menuOpen = !menuOpen)} aria-label="Weitere Aktionen" aria-expanded={menuOpen}>⋯</button>
@@ -175,7 +185,7 @@
               <input type="checkbox" bind:checked={settings.autosaveFile} /> Automatisch speichern
             </label>
           {/if}
-          <button class="ghost" onclick={() => (aiDialog.open = true)}>KI einrichten …</button>
+          {#if !LESE_APP}<button class="ghost" onclick={() => (aiDialog.open = true)}>KI einrichten …</button>{/if}
           <button class="ghost" onclick={() => session.exportJson()}>Als JSON exportieren</button>
           <button class="ghost" onclick={onClose}>Schließen</button>
         </div>
@@ -230,7 +240,7 @@
   header {
     position: sticky; top: 0; z-index: 30;
     display: flex; align-items: center; gap: 0.3rem;
-    padding: 0.45rem 1rem; height: 3.6rem;
+    padding: 0.45rem max(1rem, env(safe-area-inset-right)) 0.45rem max(1rem, env(safe-area-inset-left)); height: 3.6rem;
     background: var(--bg); border-bottom: 1px solid var(--line);
   }
   .brand { display: flex; align-items: center; gap: 0.35rem; font-weight: 700; max-width: 18rem; padding-left: 0.3rem; }
@@ -255,7 +265,7 @@
   main { max-width: 1180px; margin: 0 auto; padding: 1.4rem 1.2rem 4rem; }
   /* Aufnehmen: breiter, damit im Seitenmodus eine Doppelseite passt */
   main.wide { max-width: 1760px; padding-top: 0.8rem; }
-  .toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 60; padding: 0.55rem 1rem; font-size: 0.9rem; max-width: 90vw; animation: pop 0.15s ease-out; }
+  .toast { position: fixed; left: 50%; bottom: calc(1.2rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; padding: 0.55rem 1rem; font-size: 0.9rem; max-width: 90vw; animation: pop 0.15s ease-out; }
   .toast.error { border-color: var(--danger); color: var(--danger); }
   @keyframes pop { from { opacity: 0; transform: translate(-50%, 0.4rem); } }
   @media (max-width: 1020px) {

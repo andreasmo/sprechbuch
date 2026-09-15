@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import {
   BookFormatError, bookFromJson, bookStats, bookToJson, HBOOK_MIMETYPE, importBook, readHbook,
-  SCHEMA_VERSION, UnsupportedFormatError, validateBook, writeHbook, type Book,
+  SCHEMA_VERSION, sha256Fallback, sha256Hex, UnsupportedFormatError, validateBook, writeHbook, type Book,
 } from "../src/index.js";
 import { makeEpub } from "./helpers.js";
 
@@ -78,6 +78,33 @@ describe(".hbook-Container", () => {
     const { book, bytes } = await sampleBook({ embedSource: false });
     const back = await readHbook(await writeHbook(book, bytes));
     expect(back.source).toBeNull();
+  });
+
+  it("Übergabe-Protokoll: wird mitgeschrieben, gelesen, beschädigt ignoriert", async () => {
+    const { book, bytes } = await sampleBook();
+    const base = await sha256Hex(await writeHbook(book, bytes));
+    const changes = { base, device: "iPad", updatedAt: "2026-09-15T08:00:00.000Z", edits: [{ edit: { type: "confirmSpeech" as const, ids: ["a000001"] } }] };
+    const back = await readHbook(await writeHbook(book, bytes, changes));
+    expect(back.changes).toEqual(changes);
+    expect(back.book).toEqual(book);
+    expect((await readHbook(await writeHbook(book, bytes))).changes).toBeNull();
+
+    // Beschädigt: Buch bleibt lesbar, Protokoll fehlt; unvollständige Befehle → edits null
+    const zip = await JSZip.loadAsync(await writeHbook(book, bytes));
+    zip.file("changes.json", "{kaputt");
+    expect((await readHbook(await zip.generateAsync({ type: "uint8array" }))).changes).toBeNull();
+    zip.file("changes.json", JSON.stringify({ format: "sprechbuch-changes", version: 1, base, device: "iPad", updatedAt: "", edits: [{ nix: 1 }] }));
+    expect((await readHbook(await zip.generateAsync({ type: "uint8array" }))).changes).toMatchObject({ base, edits: null });
+  });
+
+  it("SHA-256 ohne Web Crypto ergibt dasselbe", async () => {
+    for (const input of ["", "abc", "x".repeat(55), "x".repeat(56), "x".repeat(64), "»Rede« ".repeat(500)]) {
+      const bytes = new TextEncoder().encode(input);
+      const hex = [...sha256Fallback(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      expect(hex).toBe(await sha256Hex(bytes));
+    }
+    expect([...sha256Fallback(new TextEncoder().encode("abc"))].map((b) => b.toString(16).padStart(2, "0")).join(""))
+      .toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   });
 
   it("unbekannte Felder (Erweiterungen) überleben Lesen und Schreiben", async () => {

@@ -1,7 +1,7 @@
 import type { Book } from "@sprechbuch/core";
 import { describe, expect, it } from "vitest";
 import { isAbsolutePath, siblingPath } from "../platform/types";
-import { decideOpen, mayHaveChanged } from "./sync";
+import { decideIncoming, decideOpen, deviceName, mayHaveChanged, samePath } from "./sync";
 
 const book = {} as Book;
 const stamp = (sha: string) => ({ size: 10, modifiedMs: 1, sha256: sha });
@@ -45,5 +45,38 @@ describe("Pfade", () => {
     expect(siblingPath("C:\\Bücher\\Am Strom.epub", "Am Strom.hbook")).toBe("C:\\Bücher\\Am Strom.hbook");
     expect(siblingPath("/home/a/strom.pdf", "strom.hbook")).toBe("/home/a/strom.hbook");
     expect(siblingPath("strom.pdf", "strom.hbook")).toBe("strom.hbook");
+  });
+});
+
+describe("Fassung von einem Gerät ohne Dateizugriff", () => {
+  const edits = [{ edit: { type: "confirmSpeech" as const, ids: ["a000001"] } }];
+  const changes = (base: string, list: typeof edits | null = edits) => ({ base, device: "iPad", updatedAt: "", edits: list });
+
+  it("ohne Protokoll oder bei schon bekannter Datei wie bisher", () => {
+    expect(decideIncoming(null, "a".repeat(64), false)).toEqual({ action: "legacy" });
+    expect(decideIncoming(changes("s1"), "f9", true, "f9")).toEqual({ action: "legacy" });
+  });
+
+  it("beruht auf unserem Stand und hier ist nichts offen → übernehmen", () => {
+    expect(decideIncoming(changes("s1"), "s1", false)).toEqual({ action: "adopt" });
+  });
+
+  it("wir sind weiter oder haben Offenes → Befehle übertragen, nichts überschreiben", () => {
+    expect(decideIncoming(changes("s1"), "s2", false)).toEqual({ action: "apply", edits });
+    expect(decideIncoming(changes("s1"), "s1", true)).toEqual({ action: "apply", edits });
+    expect(decideIncoming(changes("s1"), undefined, false)).toEqual({ action: "apply", edits });
+  });
+
+  it("Protokoll ohne lückenlose Befehle → Entscheidung", () => {
+    expect(decideIncoming(changes("s1", null), "s2", false)).toEqual({ action: "conflict" });
+    expect(decideIncoming(changes("s1", null), "s1", false)).toEqual({ action: "adopt" });
+  });
+
+  it("Pfade und Gerätenamen", () => {
+    expect(samePath("C:\\Dropbox\\Buch.hbook", "c:/dropbox/buch.hbook")).toBe(true);
+    expect(samePath("/Users/a/Buch.hbook", "/Users/a/buch.hbook")).toBe(false);
+    expect(deviceName({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.6 Safari/605.1.15", maxTouchPoints: 5 })).toBe("iPad");
+    expect(deviceName({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.6 Safari/605.1.15", maxTouchPoints: 0 })).toBe("Browser");
+    expect(deviceName({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6 like Mac OS X)" })).toBe("iPhone");
   });
 });

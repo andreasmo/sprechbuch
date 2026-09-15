@@ -57,13 +57,14 @@
       <button class="ghost" disabled={busy} onclick={() => session.detachFile()}>Ohne Datei weiterarbeiten</button>
     </div>
   {:else if report}
-    <h2 id="conflict-title">Zusammengeführt</h2>
+    <h2 id="conflict-title">{report.from ? `Änderungen vom ${report.from} übernommen` : "Zusammengeführt"}</h2>
     <p>
-      {fmt(report.applied)} Änderung{report.applied === 1 ? "" : "en"} übertragen{report.unchanged ? `, ${fmt(report.unchanged)} waren dort schon so` : ""}.
+      {fmt(report.applied)} Änderung{report.applied === 1 ? "" : "en"} übertragen{report.unchanged ? `, ${fmt(report.unchanged)} waren hier schon so` : ""}.
+      {report.from ? "Was hier inzwischen erarbeitet wurde, bleibt erhalten." : ""}
       {session.autosaves ? "Das Ergebnis wird gleich in die Datei geschrieben." : "Mit Strg+S speichern."}
     </p>
     {#if report.skipped.length}
-      <p class="small"><strong>Nicht übertragbar</strong> – die Stelle gibt es in der Fassung aus der Datei nicht mehr:</p>
+      <p class="small"><strong>Nicht übertragbar</strong> – die Stelle gibt es {report.from ? "hier" : "in der Fassung aus der Datei"} nicht mehr:</p>
       <ul class="skipped small">
         {#each report.skipped as s, i (i)}<li>{s.label}: <span class="muted">{s.reason}</span></li>{/each}
       </ul>

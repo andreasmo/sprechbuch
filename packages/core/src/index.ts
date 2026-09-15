@@ -22,9 +22,9 @@ export {
 
 // Buchformat
 export * from "./book/schema.js";
-export { createBook, sha256Hex, type SourceInfo } from "./book/create.js";
+export { createBook, sha256Fallback, sha256Hex, type SourceInfo } from "./book/create.js";
 export { BookFormatError, migrateBook, validateBook } from "./book/migrate.js";
-export { bookFromJson, bookToJson, readHbook, writeHbook, type HbookContents } from "./book/hbook.js";
+export { bookFromJson, bookToJson, readHbook, writeHbook, type HbookChanges, type HbookContents } from "./book/hbook.js";
 export { bookStats, REVIEW_THRESHOLD, type BookStats } from "./book/stats.js";
 
 // Bearbeiten

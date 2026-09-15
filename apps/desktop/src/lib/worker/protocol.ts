@@ -1,20 +1,22 @@
-import type { Book, ImportStage } from "@sprechbuch/core";
+import type { Book, HbookChanges, ImportStage } from "@sprechbuch/core";
 
 export type WorkerRequest =
   | { id: number; type: "import"; name: string; bytes: Uint8Array }
   | { id: number; type: "open"; bytes: Uint8Array }
   | { id: number; type: "json"; text: string }
-  | { id: number; type: "pack"; book: Book; source: Uint8Array | null };
+  | { id: number; type: "pack"; book: Book; source: Uint8Array | null; changes: HbookChanges | null };
 
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: ImportStage }
-  | { id: number; type: "book"; book: Book; source: Uint8Array | null; ms: number }
+  | { id: number; type: "book"; book: Book; source: Uint8Array | null; changes?: HbookChanges | null; ms: number }
   | { id: number; type: "bytes"; bytes: Uint8Array }
   | { id: number; type: "error"; message: string };
 
 export interface LoadedBook {
   book: Book;
   source: Uint8Array | null;
+  /** Übergabe-Protokoll eines anderen Geräts (nur bei .hbook) */
+  changes: HbookChanges | null;
   ms: number;
 }
 
@@ -52,7 +54,7 @@ function run<R>(req: Payload, pick: (msg: WorkerResponse) => R | undefined, onPr
   });
 }
 
-const asBook = (m: WorkerResponse) => (m.type === "book" ? { book: m.book, source: m.source, ms: m.ms } : undefined);
+const asBook = (m: WorkerResponse) => (m.type === "book" ? { book: m.book, source: m.source, changes: m.changes ?? null, ms: m.ms } : undefined);
 
 export const importSource = (name: string, bytes: Uint8Array, onProgress?: (s: ImportStage) => void) =>
   run<LoadedBook>({ type: "import", name, bytes }, asBook, onProgress);
@@ -61,6 +63,6 @@ export const openHbook = (bytes: Uint8Array) => run<LoadedBook>({ type: "open", 
 
 export const openJson = (text: string) => run<LoadedBook>({ type: "json", text }, asBook);
 
-/** Buch (+ Quelle) zu .hbook-Bytes packen – im Worker, weil ZIP-Kompression Zeit kostet. */
-export const packHbook = (book: Book, source: Uint8Array | null) =>
-  run<Uint8Array>({ type: "pack", book, source }, (m) => (m.type === "bytes" ? m.bytes : undefined));
+/** Buch (+ Quelle, + Übergabe-Protokoll) zu .hbook-Bytes packen – im Worker, weil ZIP-Kompression Zeit kostet. */
+export const packHbook = (book: Book, source: Uint8Array | null, changes: HbookChanges | null = null) =>
+  run<Uint8Array>({ type: "pack", book, source, changes }, (m) => (m.type === "bytes" ? m.bytes : undefined));

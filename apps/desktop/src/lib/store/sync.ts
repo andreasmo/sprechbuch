@@ -2,7 +2,7 @@
  * Datei auf der Platte ↔ Absturzsicherung in der App: Welche Fassung gilt beim Öffnen?
  * Reine Funktionen, damit die Regeln getestet werden können.
  */
-import type { Book, JournalEntry } from "@sprechbuch/core";
+import type { Book, HbookChanges, JournalEntry } from "@sprechbuch/core";
 import type { FileStamp } from "../platform";
 
 export interface SnapshotBase {
@@ -27,6 +27,46 @@ export function decideOpen(snapshot: SnapshotBase | undefined, fileSha: string |
   if (fileSha && snapshot.fileStamp?.sha256 === fileSha) return { action: "resume" };
   if (!snapshot.dirty) return { action: "file" };
   return { action: "conflict", canMerge: Array.isArray(snapshot.journal) };
+}
+
+export type IncomingDecision =
+  /** Kein Übergabe-Protokoll: wie bisher (neuere Datei laden bzw. Konflikt) */
+  | { action: "legacy" }
+  /** Die andere Fassung beruht genau auf unserem Stand, hier ist nichts offen – einfach übernehmen */
+  | { action: "adopt" }
+  /** Befehle des anderen Geräts auf unseren Stand übertragen – unser neuerer Stand bleibt erhalten */
+  | { action: "apply"; edits: JournalEntry[] }
+  /** Protokoll ohne lückenlose Befehle, und die Stände weichen ab – der Mensch entscheidet */
+  | { action: "conflict" };
+
+/**
+ * Eine Fassung von einem Gerät ohne Dateizugriff (iPad, Browser) trifft ein – beim Öffnen oder weil
+ * die Datei im Cloud-Ordner ersetzt wurde. Weil das Gerät nicht prüfen konnte, ob die Datei
+ * inzwischen neuer war, darf sie unseren Stand nicht einfach ersetzen.
+ */
+export function decideIncoming(
+  changes: HbookChanges | null | undefined, ownSha: string | undefined, dirty: boolean, fileSha?: string,
+): IncomingDecision {
+  // Genau diese Datei kennen wir schon (z. B. früher getrennt geöffnet) – nichts Neues
+  if (!changes || (fileSha && ownSha === fileSha)) return { action: "legacy" };
+  if (!dirty && ownSha && changes.base === ownSha) return { action: "adopt" };
+  if (changes.edits) return { action: "apply", edits: changes.edits };
+  return { action: "conflict" };
+}
+
+/** Gleiche Datei? Windows-Pfade ohne Rücksicht auf Groß-/Kleinschreibung und Trennzeichen */
+export function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => (/^[a-zA-Z]:|\\/.test(p) ? p.replace(/\//g, "\\").toLowerCase() : p);
+  return norm(a) === norm(b);
+}
+
+/** Wie heißt dieses Gerät im Übergabe-Protokoll? */
+export function deviceName(nav: { userAgent: string; maxTouchPoints?: number } = navigator): string {
+  const ua = nav.userAgent;
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1)) return "iPad";
+  if (/iPhone/.test(ua)) return "iPhone";
+  if (/Android/.test(ua)) return "Android-Gerät";
+  return "Browser";
 }
 
 /** Hat sich die Datei (nach Größe/Zeit) womöglich geändert? Dann lohnt sich das Lesen samt Hash. */

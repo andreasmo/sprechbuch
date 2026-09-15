@@ -1,6 +1,7 @@
 import { isLocalUrl } from "@sprechbuch/core";
+import { isAppleMobile, isTouch, LESE_APP } from "../edition";
 import { readBrowserFile } from "./file";
-import { ACCEPT, type AiBridge, type FileKind, type Platform } from "./types";
+import { ACCEPT, ShareNeedsTapError, type AiBridge, type FileKind, type Platform } from "./types";
 
 /** Web: Schlüssel nur im Arbeitsspeicher dieser Seite – nach dem Neuladen neu eingeben */
 const keys = new Map<string, { baseUrl: string; key: string }>();
@@ -65,16 +66,22 @@ const ai: AiBridge = {
   },
 };
 
+/** Teilen-Menü statt Download: nur auf Touch-Geräten, die Dateien teilen können */
+const sharesFiles = typeof navigator !== "undefined" && typeof navigator.canShare === "function" && isTouch();
+
 export const webPlatform: Platform = {
   kind: "web",
   canOverwrite: false,
+  sharesFiles,
   ai,
 
   pickFile(kind: FileKind) {
     return new Promise((resolve) => {
       const input = document.createElement("input");
       input.type = "file";
-      input.accept = ACCEPT[kind].extensions.map((e) => `.${e}`).join(",");
+      // iPadOS/iOS kennen „.hbook“ nicht und grauen solche Dateien bei einem Filter aus – dort ohne Filter
+      const wanted = LESE_APP && kind === "any" ? "hbook" : kind;
+      if (!isAppleMobile()) input.accept = ACCEPT[wanted].extensions.map((e) => `.${e}`).join(",");
       input.addEventListener("change", () => {
         const f = input.files?.[0];
         resolve(f ? readBrowserFile(f) : null);
@@ -85,6 +92,21 @@ export const webPlatform: Platform = {
   },
 
   async saveFile(bytes, suggestedName, kind) {
+    if (sharesFiles) {
+      // Neutraler Typ, damit „In Dateien sichern“ den Namen samt .hbook behält
+      const file = new File([bytes as Uint8Array<ArrayBuffer>], suggestedName, { type: kind === "hbook" ? "application/octet-stream" : ACCEPT[kind].mime });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+          return suggestedName;
+        } catch (err) {
+          const name = err instanceof DOMException ? err.name : "";
+          if (name === "AbortError") return null;
+          if (name === "NotAllowedError") throw new ShareNeedsTapError();
+          // sonst: herunterladen
+        }
+      }
+    }
     const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: ACCEPT[kind].mime }));
     const a = document.createElement("a");
     a.href = url;

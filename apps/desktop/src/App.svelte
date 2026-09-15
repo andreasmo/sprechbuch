@@ -2,14 +2,15 @@
   import type { ImportStage } from "@sprechbuch/core";
   import { onMount } from "svelte";
   import ImportProgress from "./lib/components/ImportProgress.svelte";
+  import { LESE_APP } from "./lib/edition";
   import Start from "./lib/components/Start.svelte";
   import Workspace from "./lib/components/Workspace.svelte";
-  import { detectPlatform, FileMissingError, isAbsolutePath, type PickedFile, type Platform } from "./lib/platform";
+  import { detectPlatform, FileMissingError, isAbsolutePath, baseName, type PickedFile, type Platform } from "./lib/platform";
   import { loadSnapshot, loadSource, type Snapshot } from "./lib/store/persist";
   import { BookSession } from "./lib/store/session.svelte";
   import "./lib/store/settings.svelte";
-  import { decideOpen } from "./lib/store/sync";
-  import { importSource, openHbook, openJson } from "./lib/worker/protocol";
+  import { decideIncoming, decideOpen, samePath } from "./lib/store/sync";
+  import { importSource, openHbook, openJson, type LoadedBook } from "./lib/worker/protocol";
 
   type View =
     | { name: "start" }
@@ -40,6 +41,8 @@
     if (view.name === "book" && view.session !== session) await view.session.close();
     view = { name: "book", session };
     window.scrollTo({ top: 0 });
+    // Web: Browser bitten, die Absturzsicherung nicht bei Platzmangel zu löschen
+    if (!session.platform.files) void navigator.storage?.persist?.().catch(() => false);
   }
 
   const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -53,7 +56,8 @@
   const fromSnapshot = (p: Platform, snap: Snapshot, source: Uint8Array | null, extra: Partial<ConstructorParameters<typeof BookSession>[0]> = {}) =>
     new BookSession({
       platform: p, book: snap.book, source, savedPath: snap.savedPath, dirty: snap.dirty, persistSource: false,
-      fileStamp: snap.fileStamp ?? null, journal: snap.journal ?? null, sourcePath: snap.sourcePath ?? null, ...extra,
+      fileStamp: snap.fileStamp ?? null, journal: snap.journal ?? null, sourcePath: snap.sourcePath ?? null,
+      handover: snap.handover ?? null, ...extra,
     });
 
   /**
@@ -65,12 +69,19 @@
     snap ??= await loadSnapshot(loaded.book.id).catch(() => undefined);
     // Ohne Pfad (Web) dient der Dateiname nur zur Anzeige; auf dem Desktop fragt dann der Dialog
     const path = file.path ?? (p.files ? null : file.name);
+
+    // Desktop: vom iPad/Browser zurückgegebene Fassung – deren Änderungen übertragen statt den eigenen Stand zu ersetzen
+    if (p.files && loaded.changes && snap && file.path) {
+      const handled = await openIncoming(p, file as PickedFile & { path: string }, loaded, snap);
+      if (handled) return;
+    }
+
     const decision = decideOpen(snap, file.stamp?.sha256);
 
     if (decision.action === "file" || !snap) {
       const session = new BookSession({
         platform: p, book: loaded.book, source: loaded.source, savedPath: path, fileStamp: file.stamp ?? null,
-        sourcePath: snap?.sourcePath ?? null,
+        sourcePath: snap?.sourcePath ?? null, handover: loaded.changes,
       });
       await show(session);
       if (fromRecent && snap) session.notify("Die Datei war neuer als der zuletzt bearbeitete Stand – sie wurde geladen.");
@@ -94,12 +105,67 @@
     }));
   }
 
+  /**
+   * Desktop, Datei mit Übergabe-Protokoll. Liefert true, wenn hier entschieden wurde.
+   * - Kopie neben der eigentlichen Datei („Buch 2.hbook“): fragen, ob in die eigentliche Datei übernommen wird.
+   * - Die eigentliche Datei wurde ersetzt: Befehle auf den eigenen Stand übertragen.
+   */
+  async function openIncoming(p: Platform, file: PickedFile & { path: string }, loaded: LoadedBook, snap: Snapshot): Promise<boolean> {
+    const files = p.files!;
+    const changes = loaded.changes!;
+    const target = snap.savedPath && isAbsolutePath(snap.savedPath) ? snap.savedPath : null;
+    if (target && !samePath(target, file.path)) {
+      if (!changes.edits) return false;
+      const n = changes.edits.length;
+      const answer = await files.ask(
+        `„${baseName(file.path)}“ ist eine Fassung vom ${changes.device} mit ${n} Änderung${n === 1 ? "" : "en"} zu „${baseName(target)}“.\n\n`
+          + `In „${baseName(target)}“ übernehmen? Dort Erarbeitetes bleibt erhalten.`,
+        { yes: "Übernehmen", no: "Nur diese Datei öffnen", cancel: "Abbrechen" },
+        "Änderungen vom anderen Gerät",
+      );
+      if (answer === "cancel") {
+        view = { name: "start" };
+        return true;
+      }
+      if (answer === "no") return false;
+      let targetFile: PickedFile & { path: string };
+      try {
+        targetFile = await files.read(target);
+      } catch (err) {
+        view = { name: "error", message: `„${baseName(target)}“ ließ sich nicht öffnen: ${errorText(err)}` };
+        return true;
+      }
+      await openBookFile(p, targetFile, snap);
+      if (view.name !== "book") return true;
+      if (view.session.conflict) view.session.notify("Erst den Konflikt lösen, dann die Kopie noch einmal öffnen.", "error");
+      else view.session.applyIncoming(changes.edits, changes.device, { stamp: null, progress: loaded.book.progress ?? null });
+      return true;
+    }
+    const incoming = decideIncoming(changes, snap.fileStamp?.sha256, snap.dirty, file.stamp?.sha256);
+    if (incoming.action === "legacy" || incoming.action === "adopt") return false;
+    const source = loaded.source ?? (await loadSource(snap.book.id).catch(() => null));
+    if (incoming.action === "conflict") {
+      await show(fromSnapshot(p, snap, source, {
+        savedPath: file.path,
+        conflict: { kind: "changed", path: file.path, other: { book: loaded.book, source: loaded.source, stamp: file.stamp ?? null }, journal: null },
+      }));
+      return true;
+    }
+    const session = fromSnapshot(p, snap, source, { savedPath: file.path });
+    await show(session);
+    session.applyIncoming(incoming.edits, changes.device, { stamp: file.stamp ?? null, progress: loaded.book.progress ?? null });
+    return true;
+  }
+
   async function load(file: PickedFile) {
     const p = platform;
     if (!p) return;
     view = { name: "working", file: file.name, stage: null };
     try {
       const kind = kindOf(file);
+      if (LESE_APP && kind !== "hbook") {
+        throw new Error("Die Lese-App öffnet nur Sprechbuch-Dateien (.hbook). EPUB und PDF werden in der Desktop-App aufbereitet.");
+      }
       if (kind === "hbook") {
         await openBookFile(p, file, undefined);
       } else if (kind === "json") {

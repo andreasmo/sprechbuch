@@ -144,6 +144,23 @@ mark.sp .badge {
 ::highlight(sb-search) { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
 ::highlight(sb-search-current) { background-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--fg); }
 
+/* ---------- Tablet und Telefon ---------- */
+html { -webkit-text-size-adjust: 100%; }
+/* Kein Doppeltipp-Zoom und keine Verzögerung beim Antippen */
+button, input, select, label, a { touch-action: manipulation; }
+
+@media (pointer: coarse) {
+  /* Fingergerechte Bedienflächen (etwa 44 px) – außer den Satzgrenzen im Fließtext */
+  button:not(.pipe), select { min-height: 2.75rem; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 2.75rem; }
+  input[type="checkbox"], input[type="radio"] { width: 1.25rem; height: 1.25rem; }
+}
+
+/* Ohne Tastatur-Hover (Finger) sind Tastenkürzel nur Ballast */
+@media (hover: none) and (pointer: coarse) {
+  kbd { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
