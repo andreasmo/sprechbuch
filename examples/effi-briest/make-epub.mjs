@@ -14,10 +14,12 @@ import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const paragraphs = readFileSync(join(here, "kapitel-1.txt"), "utf8").trim().split("\n");
+const paragraphs = readFileSync(join(here, "kapitel-1.txt"), "utf8").trim().split(/\r?\n/);
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const date = new Date("1896-01-01T00:00:00Z");
-const add = (zip, name, content, store = false) => zip.file(name, content, { date, compression: store ? "STORE" : "DEFLATE" });
+// ZIP kennt kein Datum vor 1980 – ein festes Datum genügt; Ordnereinträge (mit aktueller Zeit) weglassen
+const date = new Date("2026-09-15T00:00:00Z");
+const add = (zip, name, content, store = false) =>
+  zip.file(name, content, { date, createFolders: false, compression: store ? "STORE" : "DEFLATE" });
 
 const zip = new JSZip();
 add(zip, "mimetype", "application/epub+zip", true);
