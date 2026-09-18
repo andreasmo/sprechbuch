@@ -4,7 +4,7 @@
  * Reine Funktion ohne DOM. Jedes Textstück kennt seine Offsets im Absatztext –
  * darüber übersetzt die Oberfläche Klicks und Textauswahl zurück in Positionen.
  */
-import { REVIEW_THRESHOLD, slotOf, type Annotation, type Book, type BookBlock, type CastEntry } from "@sprechbuch/core";
+import { penSlot, REVIEW_THRESHOLD, slotOf, type Annotation, type Book, type BookBlock, type CastEntry, type Ink } from "@sprechbuch/core";
 
 export interface SpeechInfo {
   id: string;
@@ -27,11 +27,13 @@ export interface TextPiece {
   italic?: boolean;
   bold?: boolean;
   emphasis?: boolean;
+  /** Stiftfarbe der Betonung (Index in PEN_SLOTS), null = schlicht */
+  pen?: number | null;
   retake?: boolean;
   note?: boolean;
   bookmark?: boolean;
   /** Markierungen, die an diesem Stück beginnen (für Symbole wie ★ ✎ ⟲) */
-  starts?: { id: string; type: "retake" | "note" | "bookmark"; text?: string }[];
+  starts?: { id: string; type: "retake" | "note" | "bookmark"; text?: string; ink?: Ink }[];
 }
 
 export interface PointPiece {
@@ -147,12 +149,18 @@ export function renderBlock(
             break;
           }
           case "quote": piece.quote = true; break;
-          case "emphasis": piece.emphasis = true; break;
+          case "emphasis":
+            piece.emphasis = true;
+            piece.pen = penSlot(a.color);
+            break;
           case "retake": case "note": case "bookmark": {
             piece[a.type] = true;
             if (!seenStart.has(a.id)) {
               seenStart.add(a.id);
-              (piece.starts ??= []).push({ id: a.id, type: a.type, ...(a.type === "note" ? { text: a.text } : a.type === "retake" && a.note ? { text: a.note } : {}) });
+              (piece.starts ??= []).push({
+                id: a.id, type: a.type,
+                ...(a.type === "note" ? { text: a.text, ...(a.ink ? { ink: a.ink } : {}) } : a.type === "retake" && a.note ? { text: a.note } : {}),
+              });
             }
             break;
           }

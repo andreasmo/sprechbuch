@@ -1,12 +1,19 @@
 <script lang="ts">
-  import { endOf, startOf, type Annotation } from "@sprechbuch/core";
+  import { endOf, startOf, type Annotation, type Ink } from "@sprechbuch/core";
   import { isTouch } from "../edition";
+  import { emphasize, emphasizeStrike } from "../emphasis";
   import { MARK_LABEL, viaLabel } from "../labels";
+  import { penName } from "../markers";
   import { snapSelection } from "../render";
   import type { BookSession } from "../store/session.svelte";
+  import { settings } from "../store/settings.svelte";
   import CastPicker from "./CastPicker.svelte";
   import ChapterNav from "./ChapterNav.svelte";
+  import InkSheet from "./InkSheet.svelte";
+  import InkView from "./InkView.svelte";
   import Legend from "./Legend.svelte";
+  import PenColors from "./PenColors.svelte";
+  import PenPick from "./PenPick.svelte";
   import Popover from "./Popover.svelte";
   import TextView, { type TextHit, type TextSelection } from "./TextView.svelte";
 
@@ -72,6 +79,31 @@
     if (created && pop?.kind === "text") pop = { ...pop, pickFor: created };
   }
 
+  // ---- Handschrift ------------------------------------------------------------ //
+  /** Schreibblatt: neue Notiz an einer Auswahl oder Handschrift einer vorhandenen Notiz */
+  let sheet = $state<
+    | { kind: "new"; block: string; start: number; end: number; text: string }
+    | { kind: "edit"; id: string; ink: Ink | null; text: string }
+    | null
+  >(null);
+
+  function openSheet(target: NonNullable<typeof sheet>) {
+    close();
+    sheet = target;
+  }
+
+  function saveSheet(res: { ink: Ink | null; text: string }) {
+    const s = sheet;
+    sheet = null;
+    if (!s) return;
+    if (s.kind === "new") {
+      session.apply({ type: "addMark", mark: { type: "note", block: s.block, start: s.start, end: s.end, text: res.text, ...(res.ink ? { ink: res.ink } : {}) } });
+      return;
+    }
+    if (JSON.stringify(res.ink) !== JSON.stringify(s.ink)) session.apply({ type: "setInk", id: s.id, ink: res.ink });
+    if (res.text !== s.text) session.apply({ type: "setNote", id: s.id, text: res.text });
+  }
+
   const castName = (id: string | null) => (id ? (session.lookup.cast.get(id)?.name ?? id) : "nicht zugeordnet");
 </script>
 
@@ -80,6 +112,7 @@
     <ChapterNav book={session.book} index={chapterIndex} onChange={(i) => { chapterIndex = i; close(); }} />
     <Legend {session} {chapter} limit={10} />
   </div>
+  <PenColors {session} {chapter} />
   <p class="hint muted small">
     {#if touch}
       <strong>Stelle antippen</strong>: Sprecher ändern, Pause, Atem, Satz teilen · <strong>Lange drücken und markieren</strong>: Rede,
@@ -88,12 +121,18 @@
       <strong>Rede anklicken</strong>: Sprecher ändern · <strong>Text markieren</strong>: Rede, Betonung, Notiz, Retake ·
       <kbd>Alt</kbd>+Klick: Satz teilen, Pause, Atem · <strong>|</strong> anklicken: Sätze verbinden
     {/if}
+    {#if settings.penSeen}· <strong>Stift</strong>: durch oder unter Wörtern streichen = Betonung in der gewählten Farbe{/if}
   </p>
 
   <div class="page panel">
-    <TextView {session} {chapter} mode="edit" {onText} onSelect={onSelect} {onPipe} onPoint={(id, x, y) => (pop = { kind: "point", id, x, y })} />
+    <TextView {session} {chapter} mode="edit" {onText} onSelect={onSelect} {onPipe} onPoint={(id, x, y) => (pop = { kind: "point", id, x, y })}
+      onStrike={(sel) => emphasizeStrike(session, sel)} />
   </div>
 </div>
+
+{#if sheet}
+  <InkSheet ink={sheet.kind === "edit" ? sheet.ink : null} text={sheet.text} onSave={saveSheet} onClose={() => (sheet = null)} />
+{/if}
 
 {#if pop?.kind === "text"}
   {@const hit = pop.hit}
@@ -142,14 +181,31 @@
       {/if}
       {#each anns.filter((a) => a.type !== "speech") as a (a.id)}
         <div class="mark">
-          <strong>{MARK_LABEL[a.type]}</strong>
+          <strong>{MARK_LABEL[a.type]}{#if a.type === "emphasis"} · {penName(a.color, session.book.emphasisLabels)}{/if}</strong>
+          {#if a.type === "emphasis"}
+            <PenPick value={a.color ?? null} labels={session.book.emphasisLabels}
+              onPick={(c) => { settings.penColor = c; session.apply({ type: "setEmphasisColor", id: a.id, color: c }); }} />
+          {/if}
+          {#if a.type === "note" && a.ink}
+            <button class="inkbox" onclick={() => openSheet({ kind: "edit", id: a.id, ink: a.ink ?? null, text: a.text })} title="Handschrift ändern">
+              <InkView ink={a.ink} />
+            </button>
+          {/if}
           {#if a.type === "note" || a.type === "retake"}
-            <textarea rows="2" value={a.type === "note" ? a.text : (a.note ?? "")} placeholder="Notiz"
+            <textarea rows="2" value={a.type === "note" ? a.text : (a.note ?? "")} placeholder={a.type === "note" && a.ink ? "Getippt (optional)" : "Notiz"}
               onchange={(e) => session.apply({ type: "setNote", id: a.id, text: e.currentTarget.value })}></textarea>
           {/if}
-          {#if a.type !== "quote"}
-            <button class="danger ghost" onclick={() => act({ type: "removeAnnotation", id: a.id })}>Entfernen</button>
-          {/if}
+          <div class="row tight">
+            {#if a.type === "note"}
+              <button onclick={() => openSheet({ kind: "edit", id: a.id, ink: a.ink ?? null, text: a.text })}>✍ {a.ink ? "Handschrift ändern" : "Mit Stift schreiben"}</button>
+              {#if a.ink && a.text.trim()}
+                <button class="ghost" onclick={() => act({ type: "setInk", id: a.id, ink: null })}>Handschrift entfernen</button>
+              {/if}
+            {/if}
+            {#if a.type !== "quote"}
+              <button class="danger ghost" onclick={() => act({ type: "removeAnnotation", id: a.id })}>Entfernen</button>
+            {/if}
+          </div>
         </div>
       {/each}
     {/if}
@@ -160,10 +216,13 @@
     {#if pop.step === "menu"}
       <div class="row">
         <button class="primary" onclick={() => pop?.kind === "selection" && (pop = { ...pop, step: "speaker" })}>Rede von …</button>
-        <button onclick={() => act({ type: "addMark", mark: { type: "emphasis", block: sel.block, start: sel.start, end: sel.end } })}>Betonung</button>
         <button onclick={() => act({ type: "addMark", mark: { type: "retake", block: sel.block, start: sel.start, end: sel.end } })}>⟲ Retake</button>
         <button onclick={() => act({ type: "addMark", mark: { type: "bookmark", block: sel.block, start: sel.start, end: sel.end } })}>★</button>
         <button onclick={() => pop?.kind === "selection" && (pop = { ...pop, step: "note" })}>✎ Notiz</button>
+      </div>
+      <div class="emph-row">
+        <span class="small muted">Betonung</span>
+        <PenPick labels={session.book.emphasisLabels} onPick={(c) => { emphasize(session, sel.block, sel.start, sel.end, c); close(); }} />
       </div>
     {:else if pop.step === "speaker"}
       <h4>Wer spricht?</h4>
@@ -174,7 +233,11 @@
       <form onsubmit={(e) => { e.preventDefault(); if (noteText.trim()) act({ type: "addMark", mark: { type: "note", block: sel.block, start: sel.start, end: sel.end, text: noteText.trim() } }); }}>
         <!-- svelte-ignore a11y_autofocus -->
         <textarea rows="3" bind:value={noteText} autofocus placeholder="z. B. flüsternd, Tempo raus"></textarea>
-        <div class="row"><button class="primary" type="submit">Speichern</button></div>
+        <div class="row">
+          <button class="primary" type="submit">Speichern</button>
+          <button type="button" onclick={() => openSheet({ kind: "new", block: sel.block, start: sel.start, end: sel.end, text: noteText.trim() })}
+            title="Notiz von Hand schreiben – mit Stift oder Finger">✍ Mit Stift schreiben</button>
+        </div>
       </form>
     {/if}
   </Popover>
@@ -203,5 +266,11 @@
   .row.actions { margin: 0 0 0.6rem; }
   .mark { display: grid; gap: 0.35rem; border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.6rem; }
   .mark button { justify-self: start; }
+  .row.tight { margin-top: 0; }
+  .emph-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem 0.5rem; margin-top: 0.5rem; padding-top: 0.45rem; border-top: 1px solid var(--line); }
+  .inkbox {
+    justify-self: stretch !important; display: block; width: 100%; padding: 0.4rem 0.6rem; text-align: left; white-space: normal;
+    border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  }
   textarea { width: 100%; resize: vertical; }
 </style>

@@ -7,7 +7,9 @@ export { analyze, type AnalyzeOptions } from "./pipeline/analyze.js";
 export { detectQuoteStyle, findSpeech, QUOTE_STYLES } from "./pipeline/dialogue.js";
 export { sentenceSpans, segmentDoc } from "./pipeline/segment.js";
 export { attributeSpeakers, Cast } from "./pipeline/speakers.js";
-export { assignColors, initials, MARKER_MISC, MARKER_SLOTS, type MarkerSlot } from "./pipeline/palette.js";
+export {
+  assignColors, initials, MARKER_MISC, MARKER_SLOTS, PEN_SLOTS, penSlot, type MarkerSlot, type PenSlot,
+} from "./pipeline/palette.js";
 export { pronunciationCandidates, type PronunciationCandidate } from "./pipeline/pronunciation.js";
 
 // Import

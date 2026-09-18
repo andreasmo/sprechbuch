@@ -14,7 +14,7 @@
  *   gilt als erledigt, nicht als Fehler.
  * - Neu angelegte IDs können sich unterscheiden; spätere Befehle werden umgeschrieben.
  */
-import type { Book } from "../book/schema.js";
+import type { Book, Ink } from "../book/schema.js";
 import { applyEdit, describeEdit, EditError, type Edit, type EditResult, type MarkInput } from "./edits.js";
 
 export interface JournalEntry {
@@ -46,6 +46,8 @@ export function remapEdit(edit: Edit, ann: IdMap, cast: IdMap): Edit {
     case "splitSpeech": return { ...edit, id: re(ann, edit.id), speaker: reN(cast, edit.speaker) };
     case "removeAnnotation": return { ...edit, id: re(ann, edit.id) };
     case "setNote": return { ...edit, id: re(ann, edit.id) };
+    case "setInk": return { ...edit, id: re(ann, edit.id) };
+    case "setEmphasisColor": return { ...edit, id: re(ann, edit.id) };
     case "updateCast": return { ...edit, id: re(cast, edit.id) };
     case "setCastColor": return { ...edit, id: re(cast, edit.id) };
     case "mergeCast": return { ...edit, from: re(cast, edit.from), into: re(cast, edit.into) };
@@ -55,13 +57,17 @@ export function remapEdit(edit: Edit, ann: IdMap, cast: IdMap): Edit {
 
 /**
  * Gibt es genau diese Markierung schon? Dann ist ihr Setzen erledigt. Notizen zählen nur mit
- * gleichem Text als dieselbe – zwei Geräte können an denselben Satz Verschiedenes schreiben.
+ * gleichem Text und gleicher Handschrift als dieselbe – zwei Geräte können an denselben Satz
+ * Verschiedenes schreiben. Eine Betonung in anderer Farbe ist nicht erledigt (sie färbt um).
  */
+const inkKey = (ink: Ink | null | undefined) => (ink ? JSON.stringify([ink.h, ink.w, ink.strokes]) : "");
+
 function existingMark(book: Book, m: MarkInput): string | undefined {
   return book.annotations.find((a) => {
     if (a.type !== m.type || a.block !== m.block) return false;
     if ("at" in m) return "at" in a && a.at === m.at;
-    if (m.type === "note" && (a.type !== "note" || a.text !== m.text)) return false;
+    if (m.type === "note" && (a.type !== "note" || a.text !== m.text || inkKey(a.ink) !== inkKey(m.ink))) return false;
+    if (m.type === "emphasis" && (a.type !== "emphasis" || (a.color ?? null) !== (m.color ?? null))) return false;
     return "start" in a && a.start === m.start && a.end === m.end;
   })?.id;
 }

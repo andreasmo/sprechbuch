@@ -115,6 +115,82 @@ describe("Aufnahme-Markierungen", () => {
   });
 });
 
+describe("Farbige Betonungen", () => {
+  it("Farbe setzen, umfärben, schlicht machen; dieselbe Stelle färbt um statt zu stapeln", async () => {
+    let { book } = await sampleBook();
+    const add = (color?: number | null) => apply(book, { type: "addMark", mark: { type: "emphasis", block: "b00002", start: 5, end: 10, color } });
+    const first = add(2);
+    book = first.book;
+    expect(ann(book, first.created!)).toMatchObject({ type: "emphasis", color: 2, origin: "user" });
+
+    const again = add(0);
+    expect(again.created).toBe(first.created);
+    expect(again.book.annotations.filter((a) => a.type === "emphasis")).toHaveLength(1);
+    expect(ann(again.book, first.created!)).toMatchObject({ color: 0 });
+    // Gleiche Farbe noch einmal: keine Änderung, kein Rückgängig-Schritt
+    expect(applyEdit(again.book, { type: "addMark", mark: { type: "emphasis", block: "b00002", start: 5, end: 10, color: 0 } }, NOW).patches).toEqual([]);
+
+    const plain = apply(again.book, { type: "setEmphasisColor", id: first.created!, color: null });
+    expect(ann(plain.book, first.created!)).not.toHaveProperty("color");
+    expect(() => applyEdit(book, { type: "setEmphasisColor", id: first.created!, color: 99 }, NOW)).toThrow(/Stiftfarbe/);
+    expect(() => applyEdit(book, { type: "setEmphasisColor", id: "a000001", color: 1 }, NOW)).toThrow(/keine Betonung/);
+    expect(() => applyEdit(book, { type: "addMark", mark: { type: "emphasis", block: "b00002", start: 0, end: 4, color: 1.5 } }, NOW)).toThrow(/Stiftfarbe/);
+  });
+
+  it("Bedeutungen je Buch: setzen, kürzen, leer entfernt das Feld", async () => {
+    const { book } = await sampleBook();
+    const a = apply(book, { type: "setEmphasisLabel", color: 2, label: "  langsamer   werden " });
+    expect(a.book.emphasisLabels).toEqual(["", "", "langsamer werden"]);
+    const b = apply(a.book, { type: "setEmphasisLabel", color: 0, label: "leiser" });
+    expect(b.book.emphasisLabels).toEqual(["leiser", "", "langsamer werden"]);
+    const c = apply(b.book, { type: "setEmphasisLabel", color: 2, label: "" });
+    expect(c.book.emphasisLabels).toEqual(["leiser"]);
+    const d = apply(c.book, { type: "setEmphasisLabel", color: 0, label: " " });
+    expect(d.book).not.toHaveProperty("emphasisLabels");
+    expect(applyEdit(d.book, { type: "setEmphasisLabel", color: 0, label: "" }, NOW).patches).toEqual([]);
+    expect(() => applyEdit(book, { type: "setEmphasisLabel", color: 5, label: "x" }, NOW)).toThrow(/Stiftfarbe/);
+  });
+
+  it("unbekannte Farben aus einer neueren Version bleiben lesbar", async () => {
+    const { book } = await sampleBook();
+    const raw = JSON.parse(JSON.stringify(book)) as Book;
+    raw.annotations.push({ type: "emphasis", id: "a000900", block: "b00002", start: 0, end: 4, color: 17, origin: "user" });
+    expect(() => validateBook(raw)).not.toThrow();
+  });
+});
+
+describe("Handschriftliche Notizen", () => {
+  const ink = { h: 240, w: 9, strokes: [[10, 20, 60, 25, 110, 22], [30, 80, 32, 140]] };
+
+  it("Notiz mit Handschrift anlegen, ändern, Handschrift entfernen", async () => {
+    const { book } = await sampleBook();
+    const add: Edit = { type: "addMark", mark: { type: "note", block: "b00004", start: 0, end: 10, text: "", ink } };
+    expect(describeEdit(add)).toBe("Handschriftliche Notiz hinzugefügt");
+    const a = apply(book, add);
+    const id = a.created!;
+    expect(ann(a.book, id)).toMatchObject({ type: "note", text: "", ink });
+    // Übernommen wird eine Kopie – spätere Änderungen am Eingabeobjekt ändern das Buch nicht
+    expect((ann(a.book, id) as { ink: typeof ink }).ink.strokes[0]).not.toBe(ink.strokes[0]);
+
+    const b = apply(a.book, { type: "setInk", id, ink: { h: 100, w: 12, strokes: [[0, 0, 900, 90]] } });
+    expect(ann(b.book, id)).toMatchObject({ ink: { h: 100, w: 12 } });
+    const c = apply(b.book, { type: "setInk", id, ink: null });
+    expect(ann(c.book, id)).not.toHaveProperty("ink");
+    expect(describeEdit({ type: "setInk", id, ink: null })).toBe("Handschrift entfernt");
+    expect(() => applyEdit(book, { type: "setInk", id: "a000001", ink }, NOW)).toThrow(/Nur Notizen/);
+  });
+
+  it("kaputte oder übergroße Handschrift wird abgelehnt", async () => {
+    const { book } = await sampleBook();
+    const note = (bad: unknown) => () => applyEdit(book, { type: "addMark", mark: { type: "note", block: "b00004", start: 0, end: 10, text: "", ink: bad as typeof ink } }, NOW);
+    expect(note({ h: 100, w: 9, strokes: [[1, 2, 3]] })).toThrow(/Ungültige Handschrift/);
+    expect(note({ h: 0, w: 9, strokes: [[1, 2]] })).toThrow(/Ungültige Handschrift/);
+    expect(note({ h: 100, w: 9, strokes: [] })).toThrow(/Ungültige Handschrift/);
+    expect(note({ h: 100, w: 9, strokes: [[1.5, 2]] })).toThrow(/Ungültige Handschrift/);
+    expect(note({ h: 100, w: 9, strokes: [Array.from({ length: 40_002 }, () => 1)] })).toThrow(/zu umfangreich/);
+  });
+});
+
 describe("Satzgrenzen", () => {
   it("verbinden und wieder teilen ergibt den Ausgangszustand", async () => {
     const { book } = await sampleBook();

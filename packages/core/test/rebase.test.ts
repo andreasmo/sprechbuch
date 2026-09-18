@@ -95,4 +95,29 @@ describe("rebaseEdits", () => {
     expect(res.applied).toHaveLength(1);
     expect(res.book.annotations.filter((a) => a.type === "note").map((a) => (a as { text: string }).text).sort()).toEqual(["Tempo raus", "leiser"]);
   });
+
+  it("Handschrift und Stiftfarben: Gleiches ist erledigt, Abweichendes kommt an", async () => {
+    const { book: base } = await sampleBook();
+    const block = base.chapters[0]!.blocks[2]!.id;
+    const ink = (x: number) => ({ h: 200, w: 9, strokes: [[x, 10, x + 50, 12]] });
+    const inkNote = (x: number): Edit => ({ type: "addMark", mark: { type: "note", block, start: 0, end: 16, text: "", ink: ink(x) } });
+    const emph = (color: number): Edit => ({ type: "addMark", mark: { type: "emphasis", block, start: 18, end: 30, color } });
+
+    // Anderes Gerät: dieselbe Handschrift, Betonung in Rot
+    const theirs = run(base, [inkNote(10), emph(0)]).book;
+    // Hier: dieselbe Handschrift, eine zweite, dieselbe Stelle in Blau, danach die zweite Handschrift geändert
+    const mine = run(base, [inkNote(10), inkNote(300), emph(1), { type: "setInk", id: "a000009", ink: ink(500) }]);
+
+    const res = rebaseEdits(theirs, mine.journal, NOW);
+    expect(res.skipped).toEqual([]);
+    expect(res.unchanged.map((e) => e.type)).toEqual(["addMark"]);
+    const book = res.book;
+    expect(() => validateBook(JSON.parse(JSON.stringify(book)))).not.toThrow();
+    const notes = book.annotations.filter((a) => a.type === "note") as Extract<Annotation, { type: "note" }>[];
+    expect(notes.map((n) => n.ink?.strokes[0]![0]).sort((a, b) => a! - b!)).toEqual([10, 500]);
+    // Die Stelle ist einmal betont – in der eigenen, jüngeren Farbe
+    const emphases = book.annotations.filter((a) => a.type === "emphasis");
+    expect(emphases).toHaveLength(1);
+    expect(emphases[0]).toMatchObject({ color: 1 });
+  });
 });

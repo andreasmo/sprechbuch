@@ -114,6 +114,27 @@ describe(".hbook-Container", () => {
     expect(again.x_studio).toEqual({ take: 3 });
     expect((again.cast[0] as Record<string, unknown>).x_voice).toBe("tief");
   });
+
+  it("Stiftfarben und Handschrift: Round-Trip, gleiche Formatversion", async () => {
+    const { book } = await sampleBook();
+    const block = book.chapters[0]!.blocks[1]!.id;
+    const ink = { h: 180, w: 9, strokes: [[0, 10, 400, 30, 820, 12]] };
+    const marked: Book = {
+      ...book,
+      emphasisLabels: ["langsamer", "", "leiser"],
+      annotations: [
+        ...book.annotations,
+        { type: "emphasis", id: "a000900", block, start: 0, end: 4, color: 2, origin: "user" },
+        { type: "note", id: "a000901", block, start: 5, end: 10, text: "", ink, origin: "user" },
+      ],
+    };
+    const { book: again } = await readHbook(await writeHbook(marked));
+    expect(again.schemaVersion).toBe(1);
+    expect(again.emphasisLabels).toEqual(["langsamer", "", "leiser"]);
+    expect(again.annotations.at(-1)).toMatchObject({ type: "note", text: "", ink });
+    expect(() => validateBook({ ...marked, annotations: [...marked.annotations.slice(0, -1), { ...marked.annotations.at(-1)!, ink: { h: 1, w: 1, strokes: [[1]] } }] }))
+      .toThrow(BookFormatError);
+  });
 });
 
 describe("Validierung und Migration", () => {

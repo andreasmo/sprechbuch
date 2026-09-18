@@ -93,6 +93,8 @@ Zusätzlich lässt sich `book.json` einzeln exportieren und wieder importieren
 
   "chapterColors": { "ch002": { "makara": 3 } },
 
+  "emphasisLabels": ["langsamer"],    // optional: Bedeutung der Stiftfarben in diesem Buch
+
   "pronunciations": [
     { "term": "Kobala'ba", "kind": "foreign", "count": 19, "hint": "", "ipa": "",
       "origin": "rule", "verified": false }
@@ -108,10 +110,10 @@ Zusätzlich lässt sich `book.json` einzeln exportieren und wieder importieren
 |---|---|---|
 | `speech` | `start`, `end`, `speaker` (Figur-ID oder `null`), `confidence` 0–1, `via`, `continued?`, `suggestion?` | Direkte Rede |
 | `quote` | `start`, `end` | Zitat innerhalb einer Rede (›…‹) – erbt die Figur der umgebenden Rede |
-| `emphasis` | `start`, `end` | Betonung |
+| `emphasis` | `start`, `end`, `color?` | Betonung; `color` ist die Stiftfarbe (Index in `PEN_SLOTS`), ohne sie schlicht |
 | `retake` | `start`, `end`, `note?` | Stelle neu aufnehmen |
 | `bookmark` | `start`, `end` | Lesezeichen |
-| `note` | `start`, `end`, `text` | Notiz |
+| `note` | `start`, `end`, `text`, `ink?` | Notiz; `text` darf leer sein, wenn `ink` (Handschrift) dabei ist |
 | `pause` | `at`, `length` (`short`/`long`) | Pause setzen |
 | `breath` | `at` | Atemzeichen |
 
@@ -143,6 +145,39 @@ bestimmt. Die App zeigt alles unter `confidence` 0,5 als „zur Prüfung“.
 ([`MARKER_SLOTS`](../packages/core/src/pipeline/palette.ts), 12 Farben). Figuren mit
 `color: null` bekommen ihre Farbe pro Kapitel aus `chapterColors` – so ist innerhalb eines
 Kapitels keine Farbe doppelt vergeben.
+
+Betonungen haben ihre **eigene Palette** (`PEN_SLOTS` in derselben Datei, fünf Stiftfarben mit je
+eigener Linienart: Rot doppelt, Blau gewellt, Grün gepunktet, Orange gestrichelt, Violett kräftig).
+Was eine Farbe in diesem Buch bedeutet, steht in `emphasisLabels` – ein Feld je Farbe, leer heißt
+„nur der Farbname“:
+
+```jsonc
+"emphasisLabels": ["langsamer", "", "leiser"]
+```
+
+Eine `color`, die eine spätere Version nicht kennt, gilt als schlichte Betonung – die Datei bleibt
+lesbar.
+
+## Handschrift (`note.ink`)
+
+Eine Notiz kann handschriftlich sein. Die Striche stehen **normiert auf die Breite der
+Schreibfläche** (0–1000), y in derselben Einheit; oben und unten ist auf die Schrift zugeschnitten.
+So zeigt der Rand dieselbe Schrift bei jeder Schriftgröße, Spaltenbreite und auf jedem Gerät –
+größer oder kleiner, nie verzerrt.
+
+```jsonc
+{ "type": "note", "id": "a000123", "block": "b00042", "start": 0, "end": 96,
+  "text": "",                          // optional getippt – für Suche, Liste und Export
+  "ink": {
+    "h": 157,                          // Höhe in Tausendsteln der Breite
+    "w": 12,                           // Strichstärke, ebenso
+    "strokes": [[40, 12, 58, 96, 61, 140]]   // je Strich x,y im Wechsel, ganzzahlig
+  },
+  "origin": "user" }
+```
+
+Die Punkte sind beim Speichern ausgedünnt (Ramer–Douglas–Peucker) und gerundet; eine Notiz fasst
+höchstens 40 000 Zahlen. Wer `ink` nicht kennt, zeigt die Notiz als Text – das Feld bleibt erhalten.
 
 ## Gültigkeit
 

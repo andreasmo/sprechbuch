@@ -120,14 +120,30 @@ export const SpeechAnnotation = z.looseObject({
 });
 export type SpeechAnnotation = z.infer<typeof SpeechAnnotation>;
 
+/**
+ * Handschrift an einer Notiz. Die Striche sind auf die Breite der Schreibfläche normiert (0–1000),
+ * y in derselben Einheit – so skaliert die Schrift mit Schriftgröße und Randbreite, ohne zu verzerren.
+ */
+export const InkSchema = z.looseObject({
+  /** Höhe in Tausendsteln der Breite */
+  h: z.number().int().positive(),
+  /** Strichstärke in Tausendsteln der Breite */
+  w: z.number().positive(),
+  /** Je Strich x,y im Wechsel, ganzzahlig */
+  strokes: z.array(z.array(z.number().int()).min(2).refine((s) => s.length % 2 === 0, "Strich: x,y-Paare erwartet")),
+});
+export type Ink = z.infer<typeof InkSchema>;
+
 export const Annotation = z.discriminatedUnion("type", [
   SpeechAnnotation,
   /** Zitat innerhalb einer Rede (›…‹) – erbt die Figur der umgebenden Rede. */
   z.looseObject({ type: z.literal("quote"), ...ranged, origin: Origin }),
-  z.looseObject({ type: z.literal("emphasis"), ...ranged, origin: Origin }),
+  /** `color`: Stiftfarbe (Index in PEN_SLOTS); fehlt = schlichte Betonung. Unbekannte Farben gelten als schlicht. */
+  z.looseObject({ type: z.literal("emphasis"), ...ranged, color: z.number().int().min(0).optional(), origin: Origin }),
   z.looseObject({ type: z.literal("retake"), ...ranged, note: z.string().optional(), origin: Origin }),
   z.looseObject({ type: z.literal("bookmark"), ...ranged, origin: Origin }),
-  z.looseObject({ type: z.literal("note"), ...ranged, text: z.string(), origin: Origin }),
+  /** `text` kann leer sein, wenn die Notiz handschriftlich ist (`ink`). */
+  z.looseObject({ type: z.literal("note"), ...ranged, text: z.string(), ink: InkSchema.optional(), origin: Origin }),
   z.looseObject({ type: z.literal("pause"), ...point, length: z.enum(["short", "long"]), origin: Origin }),
   z.looseObject({ type: z.literal("breath"), ...point, origin: Origin }),
 ]);
@@ -154,6 +170,8 @@ export const BookSchema = z.looseObject({
   annotations: z.array(Annotation),
   /** Kapitelweise Markerslots für Figuren ohne feste Farbe. */
   chapterColors: z.record(z.string(), z.record(z.string(), z.number().int().min(0).nullable())),
+  /** Bedeutung der Stiftfarben in diesem Buch (Index wie PEN_SLOTS), z. B. „langsamer“; leer = nur der Farbname. */
+  emphasisLabels: z.array(z.string()).optional(),
   pronunciations: z.array(Pronunciation),
   progress: z.looseObject({ block: id, sentence: z.number().int().nonnegative() }).nullable(),
 });

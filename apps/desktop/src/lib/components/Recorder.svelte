@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Annotation } from "@sprechbuch/core";
+  import type { Annotation, Ink } from "@sprechbuch/core";
   import { onDestroy, onMount, tick } from "svelte";
   import { fitMarginNotes } from "../dom";
+  import { emphasizeStrike } from "../emphasis";
   import { findSpeechSentence } from "../find";
   import { duration, fmt, isTyping } from "../labels";
   import { chapterCast, chapterSentences, type SentenceRef } from "../render";
@@ -9,7 +10,9 @@
   import { nextTheme, settings } from "../store/settings.svelte";
   import { clock } from "../store/timer.svelte";
   import ChapterNav from "./ChapterNav.svelte";
+  import InkSheet from "./InkSheet.svelte";
   import Legend from "./Legend.svelte";
+  import PenColors from "./PenColors.svelte";
   import TextView from "./TextView.svelte";
 
   let { session, chapterIndex = $bindable(0) }: { session: BookSession; chapterIndex: number } = $props();
@@ -204,6 +207,24 @@
     noteText = "";
   }
 
+  /** Handschriftliche Notiz zum aktuellen Satz */
+  let sheet = $state<{ block: string; start: number; end: number; text: string } | null>(null);
+  function openSheet() {
+    if (!cur) return;
+    sheet = { block: cur.block, start: cur.start, end: cur.end, text: noteText.trim() };
+    noteOpen = false;
+    noteText = "";
+  }
+  function saveSheet(res: { ink: Ink | null; text: string }) {
+    const s = sheet;
+    sheet = null;
+    if (!s) return;
+    session.apply({ type: "addMark", mark: { type: "note", block: s.block, start: s.start, end: s.end, text: res.text, ...(res.ink ? { ink: res.ink } : {}) } });
+  }
+
+  /** Farben beim Aufnehmen zeigen: als Legende, wenn das Kapitel farbige Betonungen hat, und zur Wahl, wenn ein Stift im Spiel ist */
+  const coloredEmphasis = $derived(chapter.blocks.some((b) => (session.lookup.byBlock.get(b.id) ?? []).some((a) => a.type === "emphasis" && a.color !== undefined)));
+
   // ---- Prompter ------------------------------------------------------------ //
   let auto = $state(false);
   let raf = 0;
@@ -268,7 +289,8 @@
   // Seitenmodus: nach links wischen blättert vor; Scrollmodus: nächster/voriger Satz
   let swipe: { x: number; y: number; id: number } | null = null;
   function onPointerDown(ev: PointerEvent) {
-    if (ev.pointerType === "mouse") return;
+    // Nur der Finger wischt – der Stift streicht Betonungen
+    if (ev.pointerType !== "touch") return;
     swipe = { x: ev.clientX, y: ev.clientY, id: ev.pointerId };
   }
   function onPointerUp(ev: PointerEvent) {
@@ -283,7 +305,7 @@
   }
 
   function onKey(ev: KeyboardEvent) {
-    if (noteOpen || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (noteOpen || sheet || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (isTyping(ev)) return;
     const k = ev.key;
     if (k === " " || k === "ArrowRight" || k === "j") go(curIndex + (ev.shiftKey && k === " " ? -1 : 1));
@@ -340,6 +362,9 @@
   {#if settings.legend}
     <div class="legend-row">
       <Legend {session} {chapter} keys />
+      {#if coloredEmphasis || settings.penSeen}
+        <PenColors {session} {chapter} all={settings.penSeen} editable={false} />
+      {/if}
       {#if isolated}
         <p class="iso small">
           <strong>{isolated.name}</strong>{isolated.voiceNote ? ` – ${isolated.voiceNote}` : ""}
@@ -381,9 +406,14 @@
         current={cur ? { block: cur.block, sentence: cur.sentence } : null}
         isRead={(b, s) => (indexOf.get(key(b, s)) ?? Infinity) < curIndex}
         onSentence={(p) => session.setPosition(p)}
+        onStrike={(sel) => emphasizeStrike(session, sel)}
       />
     </div>
   </div>
+
+  {#if sheet}
+    <InkSheet text={sheet.text} onSave={saveSheet} onClose={() => (sheet = null)} />
+  {/if}
 
   <footer class="panel" bind:this={footer}>
     {#if settings.preview}
@@ -403,9 +433,11 @@
           <!-- svelte-ignore a11y_autofocus -->
           <input bind:value={noteText} autofocus placeholder="Notiz zum Satz" onkeydown={(e) => e.key === "Escape" && (noteOpen = false)} />
           <button type="submit">OK</button>
+          <button type="button" onclick={openSheet} title="Von Hand schreiben – mit Stift oder Finger" aria-label="Mit Stift schreiben">✍</button>
         </form>
       {:else}
         <button onclick={() => (noteOpen = true)} title="Notiz (n)">✎ Notiz</button>
+        {#if settings.penSeen}<button onclick={openSheet} title="Handschriftliche Notiz zum Satz" aria-label="Handschriftliche Notiz">✍</button>{/if}
       {/if}
       <span class="grow"></span>
       <span class="keys muted small"><kbd>Leer</kbd> weiter · <kbd>1</kbd>–<kbd>9</kbd> Figur · <kbd>m</kbd> Seiten · <kbd>?</kbd> alle Tasten</span>

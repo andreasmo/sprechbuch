@@ -1,7 +1,7 @@
 import { applyEdit, buildLookup, type Book } from "@sprechbuch/core";
 import { describe, expect, it } from "vitest";
 import { findHits, findSpeechSentence, hitContext } from "./find";
-import { listMarks, marksToCsv } from "./marks";
+import { listMarks, marksToCsv, marksToText } from "./marks";
 import { bookFrom } from "./test-book";
 
 const textOf = (book: Book, h: { block: string; start: number; end: number }) =>
@@ -62,7 +62,7 @@ describe("findSpeechSentence", () => {
 });
 
 describe("listMarks", () => {
-  it("listet Retakes, Lesezeichen und Notizen in Lesereihenfolge mit Satznummer", async () => {
+  it("listet Retakes, Lesezeichen, Notizen und Betonungen in Lesereihenfolge mit Satznummer", async () => {
     let book = await bookFrom("<p>Eins. Zwei; drei.</p><p>Vier. Fünf.</p>", "<p>Sechs.</p>");
     const [p1, p2] = book.chapters[0]!.blocks;
     const p3 = book.chapters[1]!.blocks[0]!;
@@ -76,11 +76,31 @@ describe("listMarks", () => {
     const rows = listMarks(book, buildLookup(book));
     expect(rows.map((r) => [r.type, r.chapterIndex, r.number, r.text, r.note])).toEqual([
       ["bookmark", 0, 1, "Eins.", ""],
+      ["emphasis", 0, 2, "Zwei", ""],
       ["retake", 0, 4, "Fünf.", ""],
       ["note", 1, 1, "Sechs", "leise; \"sehr\" leise"],
     ]);
+    expect(rows[1]).toMatchObject({ color: null, pen: "schlicht" });
     const csv = marksToCsv(rows);
-    expect(csv.startsWith("﻿Art;Kapitel;Kapiteltitel;Satz;Text;Notiz\r\n")).toBe(true);
-    expect(csv).toContain(`;"leise; ""sehr"" leise"\r\n`);
+    expect(csv.startsWith("﻿Art;Kapitel;Kapiteltitel;Satz;Text;Notiz;Farbe\r\n")).toBe(true);
+    expect(csv).toContain(`;"leise; ""sehr"" leise";\r\n`);
+  });
+
+  it("Stiftfarbe mit Bedeutung und reine Handschrift erscheinen in Liste und Export", async () => {
+    let book = await bookFrom("<p>Eins. Zwei; drei.</p>");
+    const p1 = book.chapters[0]!.blocks[0]!.id;
+    const ink = { h: 100, w: 12, strokes: [[10, 10, 200, 20]] };
+    for (const edit of [
+      { type: "addMark", mark: { type: "emphasis", block: p1, start: 6, end: 10, color: 0 } },
+      { type: "setEmphasisLabel", color: 0, label: "langsamer" },
+      { type: "addMark", mark: { type: "note", block: p1, start: 0, end: 5, text: "", ink } },
+    ] as const) book = applyEdit(book, edit).book;
+
+    const rows = listMarks(book, buildLookup(book));
+    expect(rows.map((r) => [r.type, r.pen ?? null, !!r.ink])).toEqual([["note", null, true], ["emphasis", "Rot – langsamer", false]]);
+    const csv = marksToCsv(rows);
+    expect(csv).toContain(";Eins.;(Handschrift);\r\n");
+    expect(csv).toContain(";Zwei;;Rot – langsamer\r\n");
+    expect(marksToText(rows)).toBe("Notiz · Kap. 1, Satz 1: Eins. – (Handschrift)\nBetonung (Rot – langsamer) · Kap. 1, Satz 2: Zwei");
   });
 });

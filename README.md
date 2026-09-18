@@ -32,10 +32,17 @@ weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser
 
 | Ansicht | Was man dort tut |
 |---|---|
-| **Übersicht** | Umfang, Sprechdauer, Qualität der Zuordnung; Figuren umbenennen, zusammenführen, Farbe und Kürzel festlegen, Stimmnotiz; Aussprache klären; Liste aller Retakes, Lesezeichen und Notizen zum Anspringen, Kopieren oder als CSV für den Schnitt |
-| **Bearbeiten** | Rede anklicken → Sprecher ändern, bestätigen, teilen, entfernen · Text markieren → als Rede setzen, Betonung, Retake, Lesezeichen, Notiz · <kbd>Alt</kbd>+Klick → Satz teilen, Pause, Atemzeichen · Pipe `\|` anklicken → Sätze verbinden |
+| **Übersicht** | Umfang, Sprechdauer, Qualität der Zuordnung; Figuren umbenennen, zusammenführen, Farbe und Kürzel festlegen, Stimmnotiz; Aussprache klären; Liste aller Retakes, Lesezeichen, Notizen und Betonungen zum Anspringen, Kopieren oder als CSV für den Schnitt |
+| **Bearbeiten** | Rede anklicken → Sprecher ändern, bestätigen, teilen, entfernen · Text markieren → als Rede setzen, **Betonung in einer Stiftfarbe**, Retake, Lesezeichen, Notiz · <kbd>Alt</kbd>+Klick → Satz teilen, Pause, Atemzeichen · Pipe `\|` anklicken → Sätze verbinden |
 | **Prüfen** | Alle unsicheren Zuordnungen nacheinander mit Kontext: <kbd>Enter</kbd> stimmt, <kbd>1</kbd>–<kbd>9</kbd> andere Figur, <kbd>N</kbd> keine Rede, <kbd>→</kbd> überspringen |
-| **Aufnehmen** | Satz für Satz lesen (<kbd>Leertaste</kbd>/<kbd>←</kbd>), scrollen oder **blättern** (<kbd>m</kbd>, auf breiten Bildschirmen als Doppelseite), Prompter mit Tempo, Vorschau auf den nächsten Satz, Fortschritt und Restzeit · **Figurenlegende**: <kbd>1</kbd>–<kbd>9</kbd> isoliert eine Figur, <kbd>.</kbd>/<kbd>,</kbd> springt zu ihrer nächsten/vorigen Rede · Retake <kbd>r</kbd>, Lesezeichen <kbd>b</kbd>, Notiz <kbd>n</kbd> – Notizen stehen gut sichtbar am linken Rand neben ihrer Zeile · **Aufnahme-Timer** <kbd>z</kbd> misst das echte Sprechtempo und übernimmt es für die Restzeit · Fokus <kbd>f</kbd>, Themen inklusive blendarmem Studio-Modus <kbd>t</kbd> |
+| **Aufnehmen** | Satz für Satz lesen (<kbd>Leertaste</kbd>/<kbd>←</kbd>), scrollen oder **blättern** (<kbd>m</kbd>, auf breiten Bildschirmen als Doppelseite), Prompter mit Tempo, Vorschau auf den nächsten Satz, Fortschritt und Restzeit · **Figurenlegende**: <kbd>1</kbd>–<kbd>9</kbd> isoliert eine Figur, <kbd>.</kbd>/<kbd>,</kbd> springt zu ihrer nächsten/vorigen Rede · Retake <kbd>r</kbd>, Lesezeichen <kbd>b</kbd>, Notiz <kbd>n</kbd> (auch handschriftlich) – Notizen stehen gut sichtbar am linken Rand neben ihrer Zeile · **Aufnahme-Timer** <kbd>z</kbd> misst das echte Sprechtempo und übernimmt es für die Restzeit · Fokus <kbd>f</kbd>, Themen inklusive blendarmem Studio-Modus <kbd>t</kbd> |
+
+**Mit dem Stift** (Apple Pencil, Surface Pen): waagerecht durch oder unter Wörtern streichen setzt
+eine **Betonung** in der gewählten Farbe – beim Bearbeiten wie beim Aufnehmen. Antippen wirkt wie mit
+dem Finger. Jede der fünf Stiftfarben hat eine eigene Linienart und bekommt je Buch ihre Bedeutung
+(„rot = langsamer“); sie steht in der Legende, in der Markierungsliste und im CSV. Notizen lassen
+sich **von Hand schreiben**: groß auf einem linierten Blatt, im Rand erscheinen sie verkleinert und
+bleiben bei jeder Schriftgröße gleich gut lesbar.
 
 Überall: <kbd>Strg</kbd>+<kbd>F</kbd> Volltextsuche im ganzen Buch, <kbd>Strg</kbd>+<kbd>Z</kbd> /
 <kbd>Strg</kbd>+<kbd>Y</kbd> Rückgängig/Wiederholen, <kbd>Strg</kbd>+<kbd>S</kbd> Speichern, <kbd>?</kbd> alle
@@ -59,7 +66,8 @@ getroffene Entscheidungen überschreibt keine automatische Analyse.
 
 - Zum Einsprechen am Tablet: dieselbe Oberfläche mit Übersicht, Bearbeiten (Sprecher, Retakes,
   Notizen, Pausen), Prüfen und Aufnehmen – ohne Import und KI. Läuft offline, lässt sich auf den
-  Home-Bildschirm legen, der Bildschirm bleibt beim Aufnehmen an; Wischen blättert.
+  Home-Bildschirm legen, der Bildschirm bleibt beim Aufnehmen an; Wischen blättert, der Apple Pencil
+  markiert und schreibt Notizen von Hand.
 - `.hbook` aus Dropbox/iCloud Drive öffnen, mit **„Sichern …“** über das Teilen-Menü zurücklegen.
   Die Desktop-App übernimmt die Änderungen – auch wenn dort inzwischen weitergearbeitet wurde, und
   auch wenn die Datei als Kopie „Buch 2.hbook“ zurückkommt.

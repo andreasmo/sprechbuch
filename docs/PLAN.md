@@ -1,6 +1,6 @@
 # Plan
 
-Stand: 15.09.2026
+Stand: 17.09.2026
 
 ## Entscheidungen
 
@@ -32,6 +32,7 @@ Stand: 15.09.2026
 | **5b – iPad/Web** | Lese-App (ohne Import/KI) für GitHub Pages: offline, Touch-Bedienung, Bildschirm bleibt an, `.hbook` hin und zurück (Teilen → Dateien/Dropbox) mit Übergabe-Protokoll, das die Desktop-App auf ihren Stand überträgt | **erledigt** (Test auf dem echten iPad offen) |
 | **5c – Builds** | Installer für Windows, macOS, Linux über GitHub Actions (**erledigt**, Workflow *Release*); Ausweichlösung, wenn es unter Linux keinen Schlüsselspeicher gibt | teilweise |
 | **5d – Veröffentlichung** | öffentliches Repository und Lese-App auf GitHub Pages (**erledigt**, mit gemeinfreiem Beispielkapitel); Release-Seite (**erledigt**, Version 0.1.0); abschaltbarer Update-Hinweis | teilweise |
+| **6 – Stift und Farben** | farbige Betonungen mit eigener Bedeutung je Buch (Legende, Markierungsliste, CSV); handschriftliche Randnotizen mit dem Stift (Apple Pencil, Surface Pen), umbruchfest gespeichert; Stiftgesten, die zu echten Markierungen werden | **erledigt** (Test mit echtem Stift offen) |
 
 ## Ergebnis Phase 1
 
@@ -352,6 +353,152 @@ Die automatische Sicherung öffnet die Verbindung zum App-Speicher neu, wenn Saf
 Tab-Wechsel getrennt hat, und meldet sonst den echten Grund statt „null“ (geprüft mit simuliert
 getrennter Verbindung und abgebrochener Transaktion; auf dem echten iPad noch zu bestätigen).
 
+## Phase 6 – Stift und Farben
+
+Zwei Dinge, die zusammengehören: Betonungen bekommen über die Farbe eine Bedeutung, und wer ein iPad
+mit Stift hat, schreibt Randnotizen von Hand und markiert mit dem Stift statt mit dem Finger. Beides
+liegt vollständig im Web-Teil, läuft also auch in der Lese-App auf dem iPad und offline.
+
+### Farbige Betonungen
+
+Heute ist eine Betonung ein Schalter: Unterstreichung und halbfett, sonst nichts. Künftig trägt sie
+eine Farbe, und was die Farbe bedeutet, legt man je Buch selbst fest – „rot = langsamer“, „blau =
+leiser“. Jede Sprecherin hat ihr eigenes System; die App gibt die Farben vor, nicht den Sinn.
+
+- **Eigene Stiftpalette**, nicht die Markerfarben der Figuren: Ein Unterstrich in derselben Farbe wie
+  das Markerband darüber wäre verwirrend. Fünf bis sechs klar unterscheidbare Töne genügen, jeder mit
+  hellem und dunklem Wert wie in `MARKER_SLOTS`.
+- **Farbe und Linienart gehören zusammen** (durchgezogen, doppelt, gewellt, gepunktet). So bleiben
+  die Betonungen im Studio-Thema, bei Farbsehschwäche und im Schwarzweißdruck unterscheidbar.
+- **Die Bedeutung steht im Buch**, nicht in den Geräte-Einstellungen: Sie gehört zum Buch wie die
+  fest vergebene Figurenfarbe (Grundregel 6 in `bookfile-format.md`). Neues Feld `emphasisLabels`
+  mit einem Namen je Farbe.
+- **Legende und Liste:** Die Legende zeigt die im Kapitel belegten Farben mit ihrer Bedeutung.
+  Betonungen fehlen bisher ganz in der Markierungsliste; mit Farbe und Bedeutung lohnt sich der
+  Eintrag dort und im CSV-Export.
+- **Auswählen** über eine schmale Farbleiste im Bearbeiten- und Aufnahmemodus. Ohne Auswahl bleibt
+  es bei der heutigen farblosen Betonung.
+- Bestehende Betonungen ohne Farbe bleiben gültig und sehen aus wie bisher (`color` ist optional).
+
+### Was der Stift kann – und was nicht
+
+Der Text fließt um: Schriftgröße, Zeilenabstand, Spaltenbreite, Schriftart, Seiten- oder Scrollmodus
+und das Drehen des iPads verschieben jedes Wort. Striche in Bildschirmkoordinaten lägen nach der
+ersten Änderung an der falschen Stelle. Deshalb nur zwei Anwendungen – und eine ausdrücklich nicht:
+
+1. **Handschrift im Rand.** Der Bereich dafür existiert seit 0.1.0: Die Randnotiz hängt an Block und
+   Zeichenbereich und ist schriftgrößenrelativ breit, wächst also bereits mit. Der Stift schreibt
+   hinein, die Handschrift skaliert mit.
+2. **Gesten statt Tinte im Text.** Der Strich wird ausgewertet und in eine Markierung verwandelt, die
+   es im Format längst gibt; der Strich selbst wird danach verworfen. Die Zeichenpositionen liefert
+   ein Treffertest gegen die vorhandenen `data-start`/`data-end`-Stücke im Text.
+
+   | Geste | wird zu |
+   |---|---|
+   | waagerecht durch oder unter Wörtern | `emphasis` in der gewählten Farbe |
+   | Kringel um Wörter | dasselbe |
+   | senkrechter Strich links neben Zeilen | `retake` oder `bookmark` für diese Sätze |
+   | Häkchen bzw. Schrägstrich zwischen Wörtern | `breath` bzw. `pause` |
+
+   Der Gewinn gegenüber Tinte: Das Ergebnis überlebt jeden Umbruch, steht in der Markierungsliste
+   und im CSV, ist durchsuchbar, lässt sich zusammenführen, und die KI kann es lesen.
+3. **Freies Malen über dem Text – nein.** Ehrlich ginge das nur mit eingefrorenem Layout (feste
+   Schriftgröße und Spaltenbreite je Buch), und das widerspricht den Lese-Einstellungen. Blockweise
+   normieren hilft nicht: Der Block wird bei anderer Schriftgröße höher, der Kringel verzerrt. Wer
+   Pfeile malen will, bekommt dafür die Randspur.
+
+### Anker und Koordinaten
+
+Kein neuer Mechanismus: derselbe Anker wie bei allen Markierungen, `block` plus `start`/`end`, mit
+`origin: "user"`. Damit greifen Rebase, Zusammenführen, Übergabe-Protokoll und Rückgängig wie gehabt.
+Die Striche stehen **normiert auf die Breite der Randnotiz** – x von 0 bis 1000, y in derselben
+Einheit, damit das Seitenverhältnis erhalten bleibt. Gezeichnet wird als SVG mit
+`viewBox="0 0 1000 h"` und `width: 100%`; dasselbe Bild gilt dann für jede Schriftgröße, jedes Gerät
+und jede Spalte im Seitenmodus. Die Strichstärke skaliert mit, nach unten begrenzt, sonst verschwindet
+sie beim Verkleinern. Die Nachrück-Logik `fitMarginNotes` misst nur Höhen und bleibt unverändert.
+
+```jsonc
+{ "type": "ink", "id": "a000123", "block": "b00042", "start": 0, "end": 96,
+  "h": 620,                           // Höhe in Tausendsteln der Breite
+  "strokes": [[0,120,14,131,22,140]], // x,y im Wechsel, ganzzahlig quantisiert
+  "text": "",                         // optional getippt – für Suche und Liste
+  "origin": "user" }
+```
+
+Beim Bauen ist daraus etwas Besseres geworden: **Die Handschrift hängt als Feld `ink` an der
+vorhandenen Notiz**, statt eine eigene Markierungsart zu sein. Neue *optionale Felder* brauchen keine
+neue `schemaVersion` (Grundregel 5), also bleiben Dateien auch für ältere Fassungen lesbar – wichtig,
+weil auf dem iPad eine ältere Lese-App im Cache liegen kann, bis man „Neue Version“ antippt. Eine
+handschriftliche Notiz ist ohnehin eine Notiz: mit Handschrift, wahlweise zusätzlich getippt.
+
+### Bedienung und Technik
+
+- Nur `pointerType === "pen"` zeichnet, der Finger scrollt weiter – das ist zugleich die
+  Handballenerkennung. `touch-action: none` ausschließlich auf der Tintenebene, `setPointerCapture`.
+- **Groß schreiben, klein anzeigen:** Der Rand ist bei Standardgröße rund 155 px breit, dort schreibt
+  niemand mit dem Pencil. Antippen öffnet ein Schreibblatt über die volle Breite, im Rand steht das
+  Ergebnis verkleinert. Durch die Normierung ist das ohne Zusatzaufwand zu haben.
+- `getCoalescedEvents()` für die 120 Hz des Pencils. Die Strichstärke bleibt gleichmäßig: Im Rand
+  verkleinert läge der Unterschied durch den Druck unter einem Pixel, kostete aber ein Drittel mehr
+  Daten in der Datei.
+- Laufender Strich auf Canvas (Verzögerung), fertiger Strich als SVG-Pfad – so skaliert er mit und
+  folgt dem Thema.
+- Löschen über einen Treffertest auf die Strich-Rechtecke, Rückgängig über das vorhandene Journal.
+- Eine Geste muss sicher erkannt werden, sonst schadet sie mehr, als sie nützt: gerade/waagerecht,
+  gerade/senkrecht, geschlossene Schleife, Häkchen – mehr nicht, und im Zweifel keine Markierung.
+
+### Reihenfolge
+
+1. **Farbige Betonungen.** Klein, sofort nützlich, unabhängig vom Stift und auch mit Maus und Finger.
+2. **Handschriftliche Randnotizen.** In sich geschlossen, nutzt den Rand aus 0.1.0, kein
+   Erkennungsrisiko.
+3. **Eine Geste als Probe** – Streichen durch einen Satz wird Betonung in der gewählten Farbe. Erst
+   wenn sich das im echten Gebrauch bewährt, die übrigen Gesten dazu.
+
+### Preis
+
+Handschrift ist nicht durchsuchbar, und die KI kann sie nicht lesen. Ein Buch voller Tintennotizen
+verliert genau das, was Sprechbuch von einem PDF-Reader unterscheidet. Deshalb kann eine Notiz beides
+tragen: Handschrift **und** optional getippten Text; in Liste und CSV steht sie sonst als
+„(Handschrift)“. Außerdem wachsen `book.json` und das Übergabe-Protokoll fürs iPad spürbar –
+ausgedünnte, gerundete Ganzzahlen statt Fließkomma sind dort kein Detail (ein handgeschriebenes Wort
+sind rund 60 Zahlen).
+
+### Ergebnis
+
+Alle drei Schritte sind gebaut.
+
+**Farbige Betonungen:** fünf Stiftfarben mit je eigener Linienart (`PEN_SLOTS`), ihre Bedeutung je
+Buch in `emphasisLabels`. Farbleiste im Bearbeiten-Modus (mit ✎ für die Bedeutungen) und als Legende
+beim Aufnehmen; im Auswahlmenü und am angetippten Unterstrich wählt man die Farbe direkt. Dieselbe
+Stelle noch einmal betont färbt um, statt zwei Striche zu stapeln. Betonungen stehen jetzt auch in
+der Markierungsliste, im CSV (neue Spalte *Farbe*) und in der Zwischenablage.
+
+**Handschrift:** „✍ Mit Stift schreiben“ öffnet ein liniertes Schreibblatt (Stift oder Finger,
+Handballen wird ignoriert, sobald ein Stift schreibt), mit Radierer, Rückgängig, Vorschau in echter
+Randgröße und optionalem getippten Text. Im Rand steht die Handschrift verkleinert, im Seitenmodus
+neben ihrer Zeile.
+
+**Stiftgeste:** Waagerecht durch oder unter Wörtern streichen setzt eine Betonung in der gewählten
+Farbe – beim Bearbeiten wie beim Aufnehmen; der Strich wird beim Ziehen mitgezeichnet und danach
+verworfen. Antippen wirkt wie mit dem Finger. Gekritzeltes, zu kurze oder zu steile Striche ergeben
+keine Markierung, sondern einen Hinweis.
+
+Zwei Dinge sind beim Bauen aufgefallen und gelöst:
+
+- Der Browser unterdrückt nach abgefangenem `pointerdown` den Klick – ein Stift-Tipper löst ihn
+  deshalb selbst aus, und ein danach doch noch gemeldeter echter Klick wird verworfen.
+- Ein Unterstrich beginnt gern knapp neben der Textspalte. Die Stifterkennung hängt darum am Fenster
+  und prüft die Nähe zum Text, statt nur auf Ereignisse im Textbereich zu warten.
+
+**Geprüft** (Chromium, simulierter Stift über das Debug-Protokoll): Farbwahl im Menü und Umfärben
+derselben Stelle, Bedeutungen festlegen, Streichen im Bearbeiten- und Aufnahmemodus (Rückmeldung mit
+Farbnamen, Leseposition bleibt stehen), Kritzeln wird abgelehnt, Antippen öffnet das Menü bzw. setzt
+die Leseposition, Schreibblatt mit Radierer und Rückgängig, Randnotiz im Scroll- und Seitenmodus,
+Markierungsliste, dunkles Thema (dunkle Farbtöne) und iPad-Maße hochkant. Kern- und App-Tests,
+Typprüfung. **Nicht geprüft:** ein echter Apple Pencil auf dem iPad – dort hängt die Erkennung an
+`touchType === "stylus"` und am abgefangenen `touchstart`.
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
@@ -382,6 +529,10 @@ getrennter Verbindung und abgebrochener Transaktion; auf dem echten iPad noch zu
   Drag & Drop sind nicht per Klick automatisiert getestet.
 - Der Prompter läuft nur im Scrollmodus. Isolierte Figur, Suche und Timer gelten für die
   laufende Sitzung und werden nicht gespeichert.
+- Der Stift ist nur mit simulierten Stift-Ereignissen in Chromium geprüft, nicht mit einem echten
+  Apple Pencil oder Surface Pen. Handschrift ist nicht durchsuchbar und für die KI nicht lesbar.
+  Freies Malen über dem Text gibt es bewusst nicht (siehe Phase 6); von den geplanten Stiftgesten ist
+  bisher nur das Streichen umgesetzt.
 - Suchtreffer im Text hervorheben braucht die CSS Custom Highlight API (WebView2 und aktuelle
   Browser; ältere WebKitGTK-Versionen unter Linux springen nur zum Treffer, ohne Markierung).
 - Der Claude-Skill aus dem Prototyp ist noch nicht auf die neue CLI umgestellt.

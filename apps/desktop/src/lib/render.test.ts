@@ -60,6 +60,25 @@ describe("renderBlock", () => {
     expect(langsam.kind === "text" && [langsam.italic, langsam.retake, langsam.note]).toEqual([true, true, undefined]);
   });
 
+  it("Stiftfarbe der Betonung und Handschrift der Notiz kommen am Stück an", async () => {
+    let book = await bookFrom("<p>Er stand auf. Dann ging er hinaus.</p>");
+    const block = book.chapters[0]!.blocks[0]!.id;
+    const ink = { h: 90, w: 12, strokes: [[0, 10, 300, 12]] };
+    for (const mark of [
+      { type: "emphasis", block, start: 0, end: 2, color: 3 },
+      { type: "emphasis", block, start: 3, end: 8 },
+      { type: "note", block, start: 14, end: 18, text: "", ink },
+    ] as const) book = applyEdit(book, { type: "addMark", mark }).book;
+    // Farbe aus einer neueren Version: gilt als schlicht
+    book = { ...book, annotations: [...book.annotations, { type: "emphasis", id: "a000999", block, start: 19, end: 23, color: 42, origin: "user" }] };
+    const pieces = render(book).flatMap((s) => s.pieces).filter((p) => p.kind === "text");
+    const find = (t: string) => pieces.find((p) => p.text === t)!;
+    expect([find("Er").emphasis, find("Er").pen]).toEqual([true, 3]);
+    expect(find("stand").pen).toBeNull();
+    expect(find("ging").pen).toBeNull();
+    expect(find("Dann").starts).toEqual([{ id: expect.any(String), type: "note", text: "", ink }]);
+  });
+
   it("Überschriften ohne Sätze sind ein einziges Segment", async () => {
     const book = await bookFrom("<h1>Kapitel 1</h1><p>Text.</p>");
     expect(render(book).map((s) => [s.sentence, s.start, s.end])).toEqual([[null, 0, 9]]);

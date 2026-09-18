@@ -10,19 +10,18 @@
  * keiner automatischen Analyse mehr überschrieben.
  */
 import { applyPatches, enablePatches, produce, produceWithPatches, type Draft, type Patch } from "immer";
-import type { Annotation, Book, BookBlock, CastEntry, SpeechAnnotation } from "../book/schema.js";
-import { MARKER_SLOTS, initials } from "../pipeline/palette.js";
+import type { Annotation, Book, BookBlock, CastEntry, Ink, SpeechAnnotation } from "../book/schema.js";
+import { MARKER_SLOTS, PEN_SLOTS, initials } from "../pipeline/palette.js";
 import { slug } from "../text.js";
 import { endOf, startOf } from "./lookup.js";
 
 enablePatches();
 
-type RangedMarkType = "emphasis" | "retake" | "bookmark" | "note";
-type PointMarkType = "pause" | "breath";
-
 export type MarkInput =
-  | { type: Exclude<RangedMarkType, "note">; block: string; start: number; end: number; note?: string }
-  | { type: "note"; block: string; start: number; end: number; text: string }
+  /** `color`: Stiftfarbe (Index in PEN_SLOTS), null/fehlt = schlicht */
+  | { type: "emphasis"; block: string; start: number; end: number; color?: number | null }
+  | { type: "retake" | "bookmark"; block: string; start: number; end: number; note?: string }
+  | { type: "note"; block: string; start: number; end: number; text: string; ink?: Ink | null }
   | { type: "pause"; block: string; at: number; length: "short" | "long" }
   | { type: "breath"; block: string; at: number };
 
@@ -34,6 +33,11 @@ export type Edit =
   | { type: "removeAnnotation"; id: string }
   | { type: "addMark"; mark: MarkInput }
   | { type: "setNote"; id: string; text: string }
+  /** Handschrift einer Notiz ersetzen oder entfernen (null) */
+  | { type: "setInk"; id: string; ink: Ink | null }
+  | { type: "setEmphasisColor"; id: string; color: number | null }
+  /** Bedeutung einer Stiftfarbe in diesem Buch; leer = nur der Farbname */
+  | { type: "setEmphasisLabel"; color: number; label: string }
   | {
     type: "mergeSentences"; block: string; index: number;
     /** Beginn des zweiten Satzes – macht den Befehl unabhängig von zwischenzeitlich verschobenen Satznummern */
@@ -93,6 +97,9 @@ const LABELS: Record<Edit["type"], string> = {
   removeAnnotation: "Markierung entfernt",
   addMark: "Markierung gesetzt",
   setNote: "Notiz geändert",
+  setInk: "Handschrift geändert",
+  setEmphasisColor: "Farbe der Betonung geändert",
+  setEmphasisLabel: "Bedeutung der Farbe geändert",
   mergeSentences: "Sätze verbunden",
   splitSentence: "Satz geteilt",
   addCast: "Figur angelegt",
@@ -110,8 +117,12 @@ const MARK_LABELS: Record<MarkInput["type"], string> = {
 };
 
 export function describeEdit(edit: Edit): string {
-  if (edit.type === "addMark") return MARK_LABELS[edit.mark.type];
+  if (edit.type === "addMark") {
+    if (edit.mark.type === "note" && edit.mark.ink) return "Handschriftliche Notiz hinzugefügt";
+    return MARK_LABELS[edit.mark.type];
+  }
   if (edit.type === "setSpeaker" && edit.speaker === null) return "Sprecher entfernt";
+  if (edit.type === "setInk" && edit.ink === null) return "Handschrift entfernt";
   return LABELS[edit.type];
 }
 
@@ -168,6 +179,25 @@ function checkRange(block: BookBlock, start: number, end: number, what: string):
   const [s, e] = trimRange(block.text, start, end);
   if (s >= e) throw new EditError(`${what}: der Bereich enthält nur Leerraum.`);
   return [s, e];
+}
+
+function checkPen(color: number | null | undefined): number | null {
+  if (color === null || color === undefined) return null;
+  if (!Number.isInteger(color) || color < 0 || color >= PEN_SLOTS.length) throw new EditError("Ungültige Stiftfarbe.");
+  return color;
+}
+
+/** Obergrenze je Notiz – rund eine volle Seite Handschrift; schützt Datei und Übergabe-Protokoll */
+const INK_MAX_NUMBERS = 40_000;
+
+/** Handschrift prüfen und als schlichte Kopie übernehmen (keine fremden Felder, keine geteilten Arrays). */
+function checkInk(ink: Ink): Ink {
+  const ok = Number.isInteger(ink.h) && ink.h > 0 && Number.isFinite(ink.w) && ink.w > 0 && Array.isArray(ink.strokes)
+    && ink.strokes.length > 0
+    && ink.strokes.every((s) => Array.isArray(s) && s.length >= 2 && s.length % 2 === 0 && s.every(Number.isInteger));
+  if (!ok) throw new EditError("Ungültige Handschrift.");
+  if (ink.strokes.reduce((n, s) => n + s.length, 0) > INK_MAX_NUMBERS) throw new EditError("Die Handschrift ist zu umfangreich für eine Notiz.");
+  return { h: ink.h, w: ink.w, strokes: ink.strokes.map((s) => [...s]) };
 }
 
 /**
@@ -306,8 +336,20 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
           : { type: "breath", id, block: m.block, at: m.at, origin: "user" });
       } else {
         const [start, end] = checkRange(block, m.start, m.end, "Markierung");
-        if (m.type === "note") {
-          book.annotations.push({ type: "note", id, block: m.block, start, end, text: m.text, origin: "user" });
+        if (m.type === "emphasis") {
+          const color = checkPen(m.color);
+          // Dieselbe Stelle noch einmal betont: nur die Farbe wechselt, statt zwei Striche zu stapeln
+          const same = book.annotations.find((a) => a.type === "emphasis" && a.block === m.block && a.start === start && a.end === end);
+          if (same?.type === "emphasis") {
+            if (color === null) delete same.color;
+            else same.color = color;
+            same.origin = "user";
+            return same.id;
+          }
+          book.annotations.push({ type: "emphasis", id, block: m.block, start, end, ...(color !== null ? { color } : {}), origin: "user" });
+        } else if (m.type === "note") {
+          const ink = m.ink ? checkInk(m.ink) : null;
+          book.annotations.push({ type: "note", id, block: m.block, start, end, text: m.text, ...(ink ? { ink } : {}), origin: "user" });
         } else if (m.type === "retake") {
           book.annotations.push({ type: "retake", id, block: m.block, start, end, origin: "user", ...(m.note ? { note: m.note } : {}) });
         } else {
@@ -321,6 +363,35 @@ function run(book: Draft<Book>, edit: Edit): string | undefined {
       if (a.type === "note") a.text = edit.text;
       else if (a.type === "retake") a.note = edit.text;
       else throw new EditError("Nur Notizen und Retakes haben einen Text.");
+      return;
+    }
+    case "setInk": {
+      const a = findAnnotation(book, edit.id);
+      if (a.type !== "note") throw new EditError("Nur Notizen haben Handschrift.");
+      if (edit.ink) a.ink = checkInk(edit.ink);
+      else delete a.ink;
+      return;
+    }
+    case "setEmphasisColor": {
+      const a = findAnnotation(book, edit.id);
+      if (a.type !== "emphasis") throw new EditError(`Markierung ${edit.id} ist keine Betonung.`);
+      const color = checkPen(edit.color);
+      if (color === null) delete a.color;
+      else a.color = color;
+      a.origin = "user";
+      return;
+    }
+    case "setEmphasisLabel": {
+      const color = checkPen(edit.color);
+      if (color === null) throw new EditError("Ungültige Stiftfarbe.");
+      const labels = [...(book.emphasisLabels ?? [])];
+      while (labels.length <= color) labels.push("");
+      labels[color] = edit.label.trim().replace(/\s+/g, " ").slice(0, 40);
+      while (labels.length && !labels.at(-1)) labels.pop();
+      // Nur schreiben, was sich ändert – sonst entstünde ein leerer Rückgängig-Schritt
+      if (JSON.stringify(labels) === JSON.stringify(book.emphasisLabels ?? [])) return;
+      if (labels.length) book.emphasisLabels = labels;
+      else delete book.emphasisLabels;
       return;
     }
     case "mergeSentences": {

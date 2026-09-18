@@ -60,6 +60,15 @@
         ["⇧+Klick", "In der Legende: Figur abblenden"],
       ],
     },
+    {
+      title: "Stift",
+      rows: [
+        ["Streichen", "Waagerecht durch oder unter Wörtern: Betonung in der gewählten Farbe"],
+        ["Tippen", "Wie mit dem Finger"],
+        ["✍", "Notiz von Hand schreiben"],
+        ["Strg+Z", "Im Schreibblatt: letzten Strich zurücknehmen"],
+      ],
+    },
   ];
 
   function onKey(ev: KeyboardEvent) {

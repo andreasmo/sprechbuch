@@ -15,13 +15,15 @@
 </script>
 
 <script lang="ts">
-  import type { BookChapter } from "@sprechbuch/core";
-  import { rangeFor, setHighlight } from "../dom";
+  import { penSlot, type BookChapter } from "@sprechbuch/core";
+  import { rangeFor, setHighlight, strokeOverlay } from "../dom";
   import { isTouch } from "../edition";
-  import { markVar, strongVar } from "../markers";
+  import { classifyStrike, type Pt, type Strike } from "../ink";
+  import { markVar, penStyle, strongVar } from "../markers";
   import { breathChunks, LONG_SENTENCE, renderBlock, sentenceNumbers, type Piece, type SpeechInfo, type TextPiece } from "../render";
   import { FONT_STACK, settings } from "../store/settings.svelte";
   import type { BookSession, Position } from "../store/session.svelte";
+  import InkView from "./InkView.svelte";
 
   let {
     session,
@@ -36,6 +38,7 @@
     onPipe,
     onSentence,
     onSelect,
+    onStrike,
   }: {
     session: BookSession;
     chapter: BookChapter;
@@ -51,6 +54,8 @@
     onPipe?: (block: string, sentence: number) => void;
     onSentence?: (pos: Position) => void;
     onSelect?: (sel: TextSelection | null) => void;
+    /** Stift: waagerecht durch Wörter gestrichen (Bereich roh, noch nicht auf Wörter erweitert); null = nicht erkannt */
+    onStrike?: (sel: TextSelection | null) => void;
   } = $props();
 
   let root: HTMLElement;
@@ -109,6 +114,9 @@
   }
 
   function onClick(ev: MouseEvent) {
+    // Nach einem Stiftstrich meldet der Browser noch einen Klick – der ist keiner.
+    // Den selbst ausgelösten Klick eines Stift-Tippers (isTrusted: false) lassen wir durch.
+    if (ev.isTrusted && performance.now() < swallowClickUntil) return;
     const target = ev.target as HTMLElement;
     const point = target.closest<HTMLElement>("[data-point]");
     if (point) {
@@ -180,6 +188,119 @@
     };
   });
 
+  // ---- Stift ---------------------------------------------------------------- //
+  // Waagerecht durch oder unter Wörtern streichen setzt eine Betonung; Antippen wirkt wie mit dem Finger.
+  const PEN_TAP_TARGETS = ".mnote, .icon, [data-point], button";
+  let pen: { id: number; points: Pt[]; overlay: ReturnType<typeof strokeOverlay> | null } | null = null;
+  let swallowClickUntil = 0;
+
+  function penColor(): string {
+    const i = penSlot(settings.penColor);
+    return getComputedStyle(root).getPropertyValue(i === null ? "--fg" : `--pen${i}`).trim() || "currentColor";
+  }
+
+  /**
+   * Gehört der Strich zum Text? Ein Unterstrich fängt gern knapp neben der Spalte an, deshalb ein
+   * Rand von zwei Zeilen um die Textansicht. Knöpfe, Menüs und Randnotizen bleiben zum Antippen.
+   */
+  function nearText(ev: PointerEvent | TouchEvent, x: number, y: number): boolean {
+    const el = ev.target as Element | null;
+    if (el?.closest?.(`${PEN_TAP_TARGETS}, .popover, .sheet, input, textarea, select, a`)) return false;
+    const r = root.getBoundingClientRect();
+    const pad = settings.fontSize * 2;
+    return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+  }
+
+  function onPenDown(ev: PointerEvent) {
+    if (ev.pointerType !== "pen") return;
+    if (!settings.penSeen) settings.penSeen = true;
+    if (ev.button !== 0 || !nearText(ev, ev.clientX, ev.clientY)) return;
+    ev.preventDefault(); // Chromium behandelt den Stift sonst wie eine Maus und markiert Text
+    root.setPointerCapture?.(ev.pointerId);
+    pen = { id: ev.pointerId, points: [{ x: ev.clientX, y: ev.clientY }], overlay: null };
+  }
+
+  function onPenMove(ev: PointerEvent) {
+    if (!pen || ev.pointerId !== pen.id) return;
+    const coalesced = ev.getCoalescedEvents?.() ?? [];
+    const fresh = (coalesced.length ? coalesced : [ev]).map((e) => ({ x: e.clientX, y: e.clientY }));
+    pen.points.push(...fresh);
+    if (pen.overlay) {
+      for (const p of fresh) pen.overlay.add(p.x, p.y);
+      return;
+    }
+    const first = pen.points[0]!;
+    if (Math.hypot(ev.clientX - first.x, ev.clientY - first.y) < 6) return;
+    pen.overlay = strokeOverlay(penColor(), Math.max(2, settings.fontSize * 0.12));
+    for (const p of pen.points) pen.overlay.add(p.x, p.y);
+  }
+
+  function onPenUp(ev: PointerEvent) {
+    if (!pen || ev.pointerId !== pen.id) return;
+    const { points, overlay } = pen;
+    pen = null;
+    if (!overlay) {
+      // Antippen: Weil die Berührung abgefangen wurde, meldet der Browser keinen Klick – also selbst einen auslösen
+      swallowClickUntil = performance.now() + 500;
+      document.elementFromPoint(ev.clientX, ev.clientY)?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, clientX: ev.clientX, clientY: ev.clientY, view: window }));
+      return;
+    }
+    overlay.done();
+    swallowClickUntil = performance.now() + 500;
+    const strike = classifyStrike(points, settings.fontSize, settings.fontSize * settings.lineHeight);
+    onStrike?.(strike ? strikeRange(strike) : null);
+  }
+
+  function onPenCancel(ev: PointerEvent) {
+    if (pen?.id !== ev.pointerId) return;
+    pen.overlay?.done();
+    pen = null;
+  }
+
+  /** Strich → Textbereich. Der Strich muss an einer Textzeile liegen; unterstrichen zählt wie durchgestrichen. */
+  function strikeRange(s: Strike): TextSelection | null {
+    const lh = settings.fontSize * settings.lineHeight;
+    // Unterstreichungen liegen unter der Grundlinie – etwas höher tasten, damit die eigene Zeile gefunden wird
+    const y = s.y - 0.2 * lh;
+    const inset = Math.min(settings.fontSize * 0.3, (s.x2 - s.x1) / 4);
+    const a = caretAt(s.x1 + inset, y);
+    const b = caretAt(s.x2 - inset, y);
+    const ha = a && root.contains(a.node) ? hitFromNode(a.node, a.offset) : null;
+    const hb = b && root.contains(b.node) ? hitFromNode(b.node, b.offset) : null;
+    if (!ha || !hb || ha.block !== hb.block || ha.offset === hb.offset) return null;
+    const start = Math.min(ha.offset, hb.offset);
+    const end = Math.max(ha.offset, hb.offset);
+    // caretAt findet auch weit weg vom Text die nächste Stelle – der Strich muss wirklich an der Zeile liegen
+    const rects = [...(rangeFor(root, ha.block, start, end)?.getClientRects() ?? [])];
+    if (!rects.some((r) => r.right > s.x1 && r.left < s.x2 && s.y > r.top - 0.4 * lh && s.y < r.bottom + 0.5 * lh)) return null;
+    return { block: ha.block, start, end, x: (s.x1 + s.x2) / 2, y: s.y + 0.5 * lh };
+  }
+
+  // Am Fenster lauschen, nicht am Text: Ein Strich beginnt oft neben der Spalte, und beim Ziehen
+  // kann der Zeiger überall landen. Safari bekommt zusätzlich die Berührung abgefangen, sonst
+  // scrollt oder markiert der Stift, statt zu zeichnen.
+  $effect(() => {
+    if (!onStrike) return;
+    const onTouch = (e: TouchEvent) => {
+      const stylus = [...e.changedTouches].find((t) => (t as Touch & { touchType?: string }).touchType === "stylus");
+      if (!stylus || !nearText(e, stylus.clientX, stylus.clientY)) return;
+      e.preventDefault();
+    };
+    window.addEventListener("pointerdown", onPenDown, true);
+    window.addEventListener("pointermove", onPenMove, true);
+    window.addEventListener("pointerup", onPenUp, true);
+    window.addEventListener("pointercancel", onPenCancel, true);
+    window.addEventListener("touchstart", onTouch, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", onPenDown, true);
+      window.removeEventListener("pointermove", onPenMove, true);
+      window.removeEventListener("pointerup", onPenUp, true);
+      window.removeEventListener("pointercancel", onPenCancel, true);
+      window.removeEventListener("touchstart", onTouch, true);
+    };
+  });
+
   /** Notizen stehen links neben dem Text – beim Lesen aus dem Augenwinkel sichtbar. Platz dafür nur, wenn es welche gibt. */
   const marginNotes = $derived(
     mode !== "review" && blocks.some((b) => (session.lookup.byBlock.get(b.id) ?? []).some((a) => a.type === "note")),
@@ -202,11 +323,13 @@
         >{p.mark === "breath" ? "✓" : p.long ? "//" : "/"}</span
       >
     {:else}
-      {#if marginNotes}{#each p.starts ?? [] as s (s.id)}{#if s.type === "note"}<span class="mnote" data-icon-at={p.start} title={s.text}>{s.text}</span
-          >{/if}{/each}{/if}{#each p.starts ?? [] as s (s.id)}<span class="icon {s.type}" data-icon-at={p.start} title={s.text ?? ""}>{icon(s.type)}</span>{/each}<span
+      {#if marginNotes}{#each p.starts ?? [] as s (s.id)}{#if s.type === "note"}<span class="mnote" class:hand={!!s.ink} data-icon-at={p.start} title={s.text || "Handschriftliche Notiz"}
+            >{#if s.ink}<InkView ink={s.ink} />{#if s.text}<span class="typed">{s.text}</span>{/if}{:else}{s.text}{/if}</span
+          >{/if}{/each}{/if}{#each p.starts ?? [] as s (s.id)}<span class="icon {s.type}" data-icon-at={p.start} title={s.text || (s.ink ? "Handschriftliche Notiz" : "")}>{icon(s.type)}</span>{/each}<span
         data-start={p.start}
         data-end={p.end}
         class="t"
+        style={p.emphasis ? penStyle(p.pen) || undefined : undefined}
         class:it={p.italic}
         class:bd={p.bold}
         class:emph={p.emphasis}
@@ -238,6 +361,7 @@
   class:numbers={settings.numbers && mode !== "review"}
   class:warn-long={settings.warnLong}
   class:margin-notes={marginNotes}
+  class:pen-strike={!!onStrike}
   style="--fs: {settings.fontSize}px; --lh: {settings.lineHeight}; --colw: {settings.columnWidth}rem; --ws: {settings.wordSpacing}em; --read-font: {FONT_STACK[settings.font]}"
   bind:this={root}
   onclick={onClick}
@@ -316,7 +440,19 @@
 
   .it { font-style: italic; }
   .bd { font-weight: 700; }
-  .emph { text-decoration: underline; text-decoration-thickness: 0.12em; text-underline-offset: 0.18em; font-weight: 600; }
+  /* Betonung: schlicht in Textfarbe, mit Stiftfarbe in deren Farbe und Linienart (--pen… aus penStyle) */
+  .emph {
+    text-decoration-line: underline;
+    text-decoration-style: var(--pen-line, solid);
+    text-decoration-color: var(--pen, currentColor);
+    text-decoration-thickness: var(--pen-thick, 0.12em);
+    text-underline-offset: 0.18em;
+    font-weight: 600;
+  }
+  /* Rede als Unterstrich: die Betonung darunter, damit sich beide Linien nicht decken */
+  [data-speech="underline"] .emph { text-underline-offset: 0.44em; }
+  /* Waagerechtes Streichen mit dem Stift gehört der Geste, senkrecht scrollt weiter */
+  .pen-strike { touch-action: pan-y pinch-zoom; }
   .retake { text-decoration: underline wavy var(--danger); text-decoration-thickness: 1px; text-underline-offset: 0.3em; }
   .note { border-bottom: 1px dotted var(--note); }
   .icon { font: 700 0.62em/1 var(--ui); vertical-align: 0.5em; margin: 0 0.15em; cursor: pointer; user-select: none; }
@@ -357,6 +493,9 @@
     line-clamp: 6;
     overflow: hidden;
   }
+  /* Handschrift: skaliert mit der Randbreite; statt Zeilen zu kürzen höchstens gut sieben Zeilen hoch */
+  .mnote.hand { display: block; max-height: 10.2em; }
+  .mnote .typed { display: block; margin-top: 0.25em; }
   .quote .mnote { margin-left: calc(-1 * (var(--note-w) + var(--fs) * 2.2) - 2px); }
   [data-mode="edit"] .mnote:hover { background: color-mix(in srgb, var(--note) 26%, var(--panel)); }
   @media (max-width: 600px) {

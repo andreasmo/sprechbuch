@@ -40,6 +40,31 @@ export const MARKER_MISC: MarkerSlot = {
   name: "Neben", light: "#e2e5ea", dark: "#2c323a", strongLight: "#5c6470", strongDark: "#a4adba",
 };
 
+/**
+ * Stiftfarben für Betonungen. Bewusst kräftige Linientöne statt der Markerbänder der Figuren, und jede
+ * Farbe mit eigener Linienart – so bleiben Betonungen auch ohne Farbe unterscheidbar (Studio-Thema,
+ * Farbsehschwäche, Schwarzweißdruck). Gewellt in Rot wäre ein Retake, deshalb ist Rot doppelt.
+ */
+export interface PenSlot {
+  name: string;
+  line: "double" | "wavy" | "dotted" | "dashed" | "solid";
+  /** Linienfarbe im hellen / dunklen Thema */
+  light: string;
+  dark: string;
+}
+
+export const PEN_SLOTS: readonly PenSlot[] = [
+  { name: "Rot", line: "double", light: "#c62828", dark: "#ff8a80" },
+  { name: "Blau", line: "wavy", light: "#1565c0", dark: "#82b1ff" },
+  { name: "Grün", line: "dotted", light: "#2e7d32", dark: "#69f0ae" },
+  { name: "Orange", line: "dashed", light: "#d84315", dark: "#ffab40" },
+  { name: "Violett", line: "solid", light: "#6a1b9a", dark: "#ea80fc" },
+];
+
+/** Stiftfarbe einer Betonung – unbekannte Indizes (neuere Version) gelten als schlicht. */
+export const penSlot = (color: number | null | undefined): number | null =>
+  color !== null && color !== undefined && Number.isInteger(color) && color >= 0 && color < PEN_SLOTS.length ? color : null;
+
 export function initials(name: string): string {
   const parts = splitWs(name.replace(/-/g, " ")).filter((p) => /^\p{L}/u.test(p));
   if (!parts.length) return "?";
