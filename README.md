@@ -7,11 +7,12 @@ Figur zu und markiert sie mit einer eigenen **Textmarker-Farbe**. Das Ergebnis i
 **`.hbook`-Datei**: ein Paket aus Text und allen Markierungen, das man verschieben, sichern und
 weitergeben kann. Geöffnet wird sie in der Sprechbuch-App (Desktop oder Browser).
 
-> **Status: Version 0.1 – die erste Veröffentlichung.** Import, Analyse, Buchformat, Bearbeiten,
-> Prüfen, Aufnahmemodus, sicheres Speichern mit Cloud-Sync-Abgleich, KI-Unterstützung (bevorzugt
-> lokal) und die Lese-App für Tablet und Browser sind fertig und unter Windows getestet. Installer
-> gibt es unter [Releases](https://github.com/andreasmo/sprechbuch/releases/latest); was noch offen
-> ist, steht in [docs/PLAN.md](docs/PLAN.md).
+> **Status: Version 0.2.** Import, Analyse, Buchformat, Bearbeiten, Prüfen, Aufnahmemodus, sicheres
+> Speichern mit Cloud-Sync-Abgleich, KI-Unterstützung (bevorzugt lokal) und die Lese-App für Tablet
+> und Browser sind fertig und unter Windows getestet; neu sind farbige Betonungen, handschriftliche
+> Notizen und die Stiftgeste. Installer gibt es unter
+> [Releases](https://github.com/andreasmo/sprechbuch/releases/latest); was noch offen ist, steht in
+> [docs/PLAN.md](docs/PLAN.md).
 
 ## Was es kann
 

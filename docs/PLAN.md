@@ -499,6 +499,22 @@ Markierungsliste, dunkles Thema (dunkle Farbtöne) und iPad-Maße hochkant. Kern
 Typprüfung. **Nicht geprüft:** ein echter Apple Pencil auf dem iPad – dort hängt die Erkennung an
 `touchType === "stylus"` und am abgefangenen `touchstart`.
 
+## Version 0.2.0
+
+**Stift und Farben** (Phase 6, oben im Einzelnen): farbige Betonungen mit einer Bedeutung je Buch,
+handschriftliche Notizen am Rand und die Streichgeste mit dem Stift. Dazu stehen Betonungen jetzt in
+der Markierungsliste und im CSV-Export (neue Spalte *Farbe*).
+
+Das Buchformat bleibt bei `schemaVersion` 1: `emphasis.color`, `note.ink` und `emphasisLabels` sind
+optionale Felder, ältere Sprechbuch-Fassungen lesen solche Dateien weiter (ohne Farbe und
+Handschrift). Nur wer Änderungen vom iPad übertragen lässt, sollte auf beiden Geräten 0.2 haben –
+beim Übertragen alter Fassungen gingen Farbe und Handschrift eines Befehls sonst verloren.
+
+**Geprüft:** Kern- und App-Tests (90 + 32), Typprüfung, Web-Build; im Browser mit simuliertem Stift
+Farbwahl, Umfärben, Bedeutungen, Streichen und Antippen in beiden Modi, Schreibblatt mit Radierer und
+Rückgängig, Randnotiz im Scroll- und Seitenmodus, Markierungsliste, dunkles Thema und iPad-Maße –
+zuletzt dasselbe im Produktionsbau der Lese-App.
+
 ## Bekannte Grenzen
 
 - PDF: Mehrspaltensatz, Fußnoten und Scans (OCR) werden nicht unterstützt. Ein neuer Absatz
